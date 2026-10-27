@@ -43,10 +43,36 @@ In `.claude/settings.json`, run the check when the agent finishes a turn, so a d
 ```
 Drop the `|| true` to make a failure block the stop and feed the message back to the agent. Start without it, and make it blocking only after the baseline has proven quiet on real work; a noisy blocking hook gets removed.
 
-### Kiro
-To make the skill active rather than on-demand, combine three things: the steering file below (always included, tells every session to use the skill), the hook (runs the check without anyone asking), and, for custom Kiro agents, a `skill://` entry in `resources` since they do not load skills by default. By hand, `/bbom-prevent` invokes it.
+### Kiro (IDE and CLI)
+To make the skill active rather than on-demand, combine three things: the steering file (always included, tells every session to use the skill), the hook (runs the check without anyone asking), and the skill itself, installed in the **workspace**. By hand, `/bbom-prevent` invokes it.
 
-Kiro keeps agent hooks as files in `.kiro/hooks/` (create one from Kiro's hooks panel rather than hand-writing the JSON, since the schema is Kiro's). Choose a trigger that fires after the agent changes files (for example on file save, or after a tool use) and make the action run the command above. For standing instructions use a steering file: copy `assets/kiro-steering.md` to `.kiro/steering/architecture.md`. Skills live in `.kiro/skills/<name>/` (workspace) or `~/.kiro/skills/` (global, IDE only); a custom Kiro agent only sees a skill if its `resources` lists a `skill://` URI for it.
+Where things live (from Kiro's docs):
+- Skills: `.kiro/skills/<name>/` in the project works in the IDE and the CLI. `~/.kiro/skills/` (global) is IDE only, so use the workspace copy if the CLI must see it.
+- Steering: copy `assets/kiro-steering.md` to `.kiro/steering/architecture.md`. Workspace steering works in the IDE and the CLI; global steering is IDE only. In the CLI, only older versions (V1/V2) load nothing but `inclusion: always` files automatically, which is what this file uses.
+- Custom agents: the default agent loads skills on its own. A custom agent may not, and its steering is not guaranteed either, so declare both in its `resources` (the docs disagree on whether they are inherited):
+```json
+{
+  "resources": [
+    "file://.kiro/steering/**/*.md",
+    "skill://.kiro/skills/*/SKILL.md"
+  ]
+}
+```
+- Hook: a file `.kiro/hooks/bbom-check.json` (workspace hooks work in the IDE and the CLI). The format below follows the example in Kiro's hooks page; `PostFileSave` runs after the agent saves or edits a file. Kiro's docs do not say what a non-zero exit does, so keep `|| true` until you have seen how it behaves in your version.
+```json
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "bbom-check",
+      "trigger": "PostFileSave",
+      "matcher": "\\.(py|js|jsx|ts|tsx|mjs|cjs)$",
+      "action": { "type": "command", "command": "python3 tools/bbom_check.py check . || true" }
+    }
+  ]
+}
+```
+Not verified: whether your Kiro CLI version reads standalone `.kiro/hooks/*.json` files (the docs describe older 2.x agents keeping hooks inside the agent JSON, convertible with `/upgrade-agent`), and the complete list of trigger names. If the hook does not fire, create it from Kiro's hooks panel or check the version, and rely on CI or pre-commit meanwhile.
 
 ### Codex, Cursor, Copilot, Gemini CLI and others
 Put the snippet from `assets/agent-instructions-snippet.md` in the instructions file the tool reads (check its docs; `AGENTS.md` is a common choice), and rely on CI or pre-commit for enforcement. Those two triggers do not depend on any harness.

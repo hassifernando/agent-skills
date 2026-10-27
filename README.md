@@ -27,11 +27,15 @@ Every finding carries a label (Confirmed, Probable, Unverified) and what could n
 
 Copy the skill folder you want into your harness's skills directory. The folder name must match the skill `name`.
 
-**Kiro**
-- Workspace: `.kiro/skills/<skill>/`. Global (IDE only): `~/.kiro/skills/<skill>/`.
-- Importing from GitHub: point the import at the skill's subdirectory (for example `skills/bbom-audit`), not the repository root.
-- Custom Kiro agents do not load skills by default. Add a `skill://` URI to the agent's `resources`.
-- For `bbom-prevent`, copy `assets/kiro-steering.md` to `.kiro/steering/architecture.md` so every session is told to use the skill.
+**Kiro (IDE and CLI)**
+- Install in the project, at `.kiro/skills/<skill>/`. This works in the IDE and the CLI. Global skills in `~/.kiro/skills/` work in the IDE only, so a CLI user needs the workspace copy.
+- Importing from GitHub (IDE panel): point the import at the skill's subdirectory (for example `skills/bbom-audit`), not the repository root.
+- The default agent loads skills automatically. For a custom agent, add the skills (and steering, if you use it) to its `resources` to be safe:
+  ```json
+  "resources": ["file://.kiro/steering/**/*.md", "skill://.kiro/skills/*/SKILL.md"]
+  ```
+- For `bbom-prevent`, copy `assets/kiro-steering.md` to `.kiro/steering/architecture.md` so every session is told to use the skill. Workspace steering works in the CLI; global steering does not.
+- The optional check hook is described in `skills/bbom-prevent/references/wiring.md`.
 
 **Claude Code**
 - Project: `.claude/skills/<skill>/`. Personal: `~/.claude/skills/<skill>/`.
