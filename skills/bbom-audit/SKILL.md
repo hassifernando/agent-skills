@@ -3,6 +3,9 @@ name: bbom-audit
 license: MIT
 compatibility: Requires python3 (standard library only) and, optionally, git. Follows the open Agent Skills format. Evals were run in Claude Code; other harnesses are untested.
 description: Read-only software architecture audit that decides whether a codebase is a Big Ball of Mud (BBoM) and how healthy its structure is. Scores ten dimensions (modularity, coupling, cohesion, business rules, data, contracts, testability, maintainability, reliability, AI-assisted development), ranks the top risks with file-level evidence, and proposes a staged recovery plan without touching the code. Use whenever the user asks to audit, assess, diagnose or review a project's architecture, technical debt, "big ball of mud", spaghetti code, modularity, coupling, structural health or maintainability, or asks "how bad is this codebase?", "is this architecture healthy?", "should we refactor or rewrite?", even if they never say "Big Ball of Mud". Do NOT use for reviewing a single diff or PR, fixing bugs, or implementing a refactor.
+metadata:
+  category: architecture
+  version: "0.1.0"
 ---
 
 # BBoM Audit

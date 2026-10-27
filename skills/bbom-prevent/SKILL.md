@@ -3,6 +3,9 @@ name: bbom-prevent
 license: MIT
 compatibility: Requires python3 (standard library only) and, optionally, git. Follows the open Agent Skills format. Evals were run in Claude Code; other harnesses are untested.
 description: Keeps a codebase from degrading into a Big Ball of Mud, continuously, across sessions. Before any structural change (new module, new abstraction, new dependency, new feature spanning layers, moving or splitting code) it runs a short placement-and-duplication check; after the change it runs an architecture ratchet that fails when files grow past their ceiling, module boundaries are crossed or the tree sprawls. Sets up persistent guardrails in the project (.bbom/ baseline and rules, architecture rules, ADRs, CI/pre-commit/hook wiring). Use when starting work in a project that should stay maintainable, when the user says "add a feature", "create a new module/service/helper", "where should this go?", "refactor", "keep the architecture clean", "prevent technical debt", "set up architecture guardrails/fitness functions", or when an AI agent is making many changes to the same codebase, even if they never mention Big Ball of Mud. Not for a one-off diagnosis of an existing mess (use bbom-audit for that).
+metadata:
+  category: architecture
+  version: "0.1.0"
 ---
 
 # BBoM Prevent

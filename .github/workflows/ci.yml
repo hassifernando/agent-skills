@@ -1,0 +1,21 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Skills are valid and the README catalog is current
+        run: python3 scripts/build_catalog.py --check
+      - name: Catalog script tests
+        run: cd scripts && python3 -m unittest test_build_catalog
+      - name: bbom-prevent tests
+        run: cd skills/bbom-prevent && python3 -m unittest scripts/test_bbom_check.py

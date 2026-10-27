@@ -1,22 +1,18 @@
 # Instructions for AI agents
 
-This file tells an AI coding agent how to install and use the skills in this repository. Follow the steps in order. Do not skip the verification steps.
+This file tells an AI coding agent how to install, verify, use and add the skills in this repository. Follow the steps in order. Do not skip the verification steps.
 
 ## What this repository is
 
-Two Agent Skills (open `SKILL.md` format). Each one is a self-contained folder:
+A collection of Agent Skills (open `SKILL.md` format). Each skill is a self-contained folder under `skills/<name>/`. The list of skills is the table in `README.md`, generated from each skill's `SKILL.md`. Each skill's own `README.md` says what it writes to the user's project, with example prompts and instructions for agents.
 
-| Folder | Use it when the user wants to... | Writes to the user's project? |
-|---|---|---|
-| `skills/bbom-audit/` | know whether a codebase is a Big Ball of Mud and how healthy its architecture is | No. Read-only. The only file it writes is the report, at the path the user gives. |
-| `skills/bbom-prevent/` | stop a codebase from getting structurally worse, or check a change against the structure rules | Yes, only after the user agrees: `.bbom/`, `docs/ARCHITECTURE.md`, `docs/adr/`, an instructions snippet, optionally a hook. |
-
-Requirements: `python3` (standard library only). `git` is optional.
+Requirements for the skills' scripts: `python3` (standard library only). `git` is optional.
 
 ## Install a skill into a project
 
-1. Ask the user which skill or skills to install, and which agent harness they use. If they do not say, ask. Do not guess.
-2. Copy the skill **folder** (not only `SKILL.md`) into the harness's skills directory. The folder name must stay equal to the skill name.
+1. Ask the user which skills to install, and which agent harness they use. If they do not say, ask. Do not guess.
+2. Read `skills/<name>/README.md` for each chosen skill, so you know what it will write to the user's project.
+3. Copy the skill **folder** (not only `SKILL.md`) into the harness's skills directory. The folder name must stay equal to the skill name.
 
 | Harness | Project directory | Notes |
 |---|---|---|
@@ -24,15 +20,14 @@ Requirements: `python3` (standard library only). `git` is optional.
 | Claude Code | `.claude/skills/<skill>/` | Personal: `~/.claude/skills/<skill>/`. |
 | Any other harness | see that harness's documentation | Not tested here. Do not assume the path. |
 
-Example (Kiro or Claude Code, run from the project root):
+Example (run from the project root, with the repository cloned outside the project):
 
 ```sh
-mkdir -p .kiro/skills
-cp -R /path/to/agent-skills/skills/bbom-audit .kiro/skills/
-cp -R /path/to/agent-skills/skills/bbom-prevent .kiro/skills/
+mkdir -p .claude/skills
+cp -R /path/to/agent-skills/skills/<skill-name> .claude/skills/
 ```
 
-3. Remove nothing from the copied folder. Do not edit `SKILL.md` unless the user asks.
+4. Remove nothing from the copied folder. Do not edit `SKILL.md` unless the user asks.
 
 ## Kiro CLI: custom agents and tools
 
@@ -41,43 +36,41 @@ cp -R /path/to/agent-skills/skills/bbom-prevent .kiro/skills/
 
 ```json
 {
-  "name": "bbom-agent",
+  "name": "my-agent",
   "tools": ["*"],
   "allowedTools": ["@builtin"],
   "resources": ["file://.kiro/steering/**/*.md", "skill://.kiro/skills/*/SKILL.md"]
 }
 ```
 
-Save it as `.kiro/agents/bbom-agent.json` and start it with `kiro-cli chat --agent bbom-agent`.
+Save it as `.kiro/agents/my-agent.json` and start it with `kiro-cli chat --agent my-agent`.
 
 ## Verify the install
 
 Run these and report the real output to the user. Do not claim success without them.
 
-1. Check the folder: `ls <skills-dir>/bbom-audit/SKILL.md <skills-dir>/bbom-prevent/SKILL.md`. Expected: both paths printed, no error.
-2. Check the scripts run: `python3 <skills-dir>/bbom-audit/scripts/repo_stats.py --help` and `python3 <skills-dir>/bbom-prevent/scripts/bbom_check.py --help`. Expected: a usage message, exit code 0.
-3. Check discovery: ask the agent for an architecture audit of a small project. The agent should name `bbom-audit` and read its `SKILL.md` first.
+1. Check each installed skill: `ls <skills-dir>/<skill>/SKILL.md`. Expected: the path printed, no error.
+2. For each script the skill ships under `scripts/`, run `python3 <skills-dir>/<skill>/scripts/<script>.py --help`. Expected: a usage message, exit code 0.
+3. Check discovery: ask for a task the skill covers (the skill's README has example prompts). The agent should name the skill and read its `SKILL.md` first.
 
-## Use `bbom-audit`
+## Use a skill
 
-1. The user asks for an architecture audit, or asks whether a codebase is a Big Ball of Mud.
-2. Follow `SKILL.md` in the skill folder. In short: run `scripts/repo_stats.py <repo> --json <out.json>` (write the JSON outside the project), read the code, score ten dimensions with `references/`, verify each finding, then write the report.
-3. Write the report in the language the user wrote in. Keep paths and code unchanged.
-4. Never modify the audited project. Never copy secret values from `.env` or similar files.
-5. Label every finding Confirmed, Probable or Unverified. List what could not be measured. Do not invent numbers.
+1. Match the user's request to a skill by its `description` in `SKILL.md`.
+2. Read that skill's `SKILL.md` and follow it. Read its `references/` files only when `SKILL.md` points to them.
+3. Follow the "Instructions for AI agents" section in the skill's `README.md`.
+4. Ask before writing anything the skill's README says it writes to the user's project. Never commit, push or publish on the user's behalf unless they ask in that message.
 
-## Use `bbom-prevent`
+## Add a skill to this repository
 
-1. Before any structural change (new module, abstraction, dependency, cross-module import, or editing a file over the size ceiling), follow the "Before you change" step in `SKILL.md`.
-2. Setup runs `python3 scripts/bbom_check.py init <repo>`, which writes `.bbom/rules.json` and `.bbom/baseline.json`. Ask the user before creating files in their project. Review the boundary rules with them.
-3. After every change run `python3 <path>/bbom_check.py check <repo>` and report the result. Exit code 1 means the structure got worse than the baseline.
-4. Never edit `.bbom/baseline.json` and never loosen `.bbom/rules.json` to make a check pass. If a regression is deliberate, use `accept --reason "..."` and add an ADR.
-5. Start any hook non-blocking (`|| true`). Make it blocking only after the baseline has been quiet on real work.
+1. Create `skills/<name>/SKILL.md`. The folder name must equal `name`. Frontmatter needs `name`, `description` (1 to 1024 characters), `license: MIT`, and `metadata` with `category` and `version` (a quoted string, for example `"0.1.0"`).
+2. Add `skills/<name>/README.md` with what the skill does, what it writes to the user's project, example prompts, and an "Instructions for AI agents" section. Put any diagram or sample output in `skills/<name>/docs/`. Do not edit `docs/banner.svg` for a new skill.
+3. Run `python3 scripts/build_catalog.py`. It rewrites the skills table in `README.md` and fails if a skill is invalid. Then run `python3 scripts/build_catalog.py --check`. Expected: `catalog up to date`.
+4. Run the tests: `cd scripts && python3 -m unittest test_build_catalog`, plus the tests of any skill you changed. Expected: `OK`.
+5. Commit locally. Tag a release as `<name>-v<version>`.
 
 ## Rules for working in this repository
 
 - Code, documentation, skills and commit messages are written in English.
 - Do not create a GitHub repository, push, tag or publish unless the user asks in that same message.
-- Keep each skill `description` at or below 1024 characters. `bbom-prevent` is close to the limit; do not grow it.
-- Run the tests before committing: `cd skills/bbom-prevent && python3 -m unittest scripts/test_bbom_check.py`. Expected: `OK`.
+- Keep each skill `description` at or below 1024 characters. `bbom-prevent` is close to the limit. Do not grow it.
 - `HANDOFF.md` and `*-workspace/` are local only and are ignored by git.
