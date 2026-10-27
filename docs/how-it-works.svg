@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 430" width="1200" height="430" role="img" aria-labelledby="t d">
+  <title id="t">How bbom-audit and bbom-prevent work together</title>
+  <desc id="d">bbom-audit reads a codebase and writes a report. bbom-prevent turns today's state into a baseline and a check that runs after every change, so the structure can only get better.</desc>
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#94a3b8"/>
+    </marker>
+  </defs>
+  <rect width="1200" height="430" rx="18" fill="#0f172a"/>
+  <g font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif">
+    <text x="600" y="48" text-anchor="middle" font-size="24" font-weight="700" fill="#f8fafc">Diagnose once, then hold the line</text>
+
+    <rect x="40" y="90" width="300" height="190" rx="14" fill="#0c4a6e" stroke="#38bdf8" stroke-width="2"/>
+    <text x="190" y="128" text-anchor="middle" font-size="22" font-weight="700" fill="#7dd3fc">1. bbom-audit</text>
+    <text x="190" y="162" text-anchor="middle" font-size="16" fill="#e0f2fe">Read-only. Scores 10 dimensions,</text>
+    <text x="190" y="186" text-anchor="middle" font-size="16" fill="#e0f2fe">cites file and line evidence,</text>
+    <text x="190" y="210" text-anchor="middle" font-size="16" fill="#e0f2fe">labels Confirmed / Probable /</text>
+    <text x="190" y="234" text-anchor="middle" font-size="16" fill="#e0f2fe">Unverified. Never edits the project.</text>
+
+    <path d="M345 185 L415 185" stroke="#94a3b8" stroke-width="3" marker-end="url(#ar)"/>
+    <text x="380" y="170" text-anchor="middle" font-size="14" fill="#94a3b8">report</text>
+
+    <rect x="420" y="90" width="340" height="190" rx="14" fill="#064e3b" stroke="#34d399" stroke-width="2"/>
+    <text x="590" y="128" text-anchor="middle" font-size="22" font-weight="700" fill="#6ee7b7">2. bbom-prevent: set up</text>
+    <text x="590" y="162" text-anchor="middle" font-size="16" fill="#d1fae5">bbom_check.py init writes .bbom/</text>
+    <text x="590" y="186" text-anchor="middle" font-size="16" fill="#d1fae5">rules.json + baseline.json from</text>
+    <text x="590" y="210" text-anchor="middle" font-size="16" fill="#d1fae5">today's state. Adds ARCHITECTURE.md,</text>
+    <text x="590" y="234" text-anchor="middle" font-size="16" fill="#d1fae5">ADRs and an instruction snippet.</text>
+
+    <path d="M765 185 L835 185" stroke="#94a3b8" stroke-width="3" marker-end="url(#ar)"/>
+
+    <rect x="840" y="90" width="320" height="190" rx="14" fill="#312e81" stroke="#a5b4fc" stroke-width="2"/>
+    <text x="1000" y="128" text-anchor="middle" font-size="22" font-weight="700" fill="#c7d2fe">3. After every change</text>
+    <text x="1000" y="162" text-anchor="middle" font-size="16" fill="#e0e7ff">check: bigger files, forbidden</text>
+    <text x="1000" y="186" text-anchor="middle" font-size="16" fill="#e0e7ff">imports, import cycles, new</text>
+    <text x="1000" y="210" text-anchor="middle" font-size="16" fill="#e0e7ff">top-level dirs. Worse than the</text>
+    <text x="1000" y="234" text-anchor="middle" font-size="16" fill="#e0e7ff">baseline? Exit 1.</text>
+
+    <path d="M1000 285 L1000 345 L590 345 L590 290" fill="none" stroke="#94a3b8" stroke-width="3" stroke-dasharray="8 6" marker-end="url(#ar)"/>
+    <text x="600" y="335" text-anchor="middle" font-size="16" fill="#cbd5e1">ratchet lowers the baseline when things improve. It never raises it.</text>
+    <text x="600" y="385" text-anchor="middle" font-size="16" fill="#94a3b8">Runs in CI, pre-commit or an agent hook. Without a check, the skill text alone does not persist.</text>
+  </g>
+</svg>

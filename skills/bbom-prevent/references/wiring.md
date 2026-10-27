@@ -49,15 +49,21 @@ To make the skill active rather than on-demand, combine three things: the steeri
 Where things live (from Kiro's docs):
 - Skills: `.kiro/skills/<name>/` in the project works in the IDE and the CLI. `~/.kiro/skills/` (global) is IDE only, so use the workspace copy if the CLI must see it.
 - Steering: copy `assets/kiro-steering.md` to `.kiro/steering/architecture.md`. Workspace steering works in the IDE and the CLI; global steering is IDE only. In the CLI, only older versions (V1/V2) load nothing but `inclusion: always` files automatically, which is what this file uses.
-- Custom agents: the default agent loads skills on its own. A custom agent may not, and its steering is not guaranteed either, so declare both in its `resources` (the docs disagree on whether they are inherited):
+- Custom agents: the default agent loads skills on its own. A custom agent may not, and its steering is not guaranteed either, so declare both in its `resources` (the docs disagree on whether they are inherited). A complete agent file, `.kiro/agents/<name>.json`, that was tested running `bbom-audit` in `kiro-cli` 2.34.2:
 ```json
 {
+  "name": "bbom-agent",
+  "description": "Runs the bbom skills",
+  "tools": ["*"],
+  "allowedTools": ["@builtin"],
+  "toolsSettings": { "shell": { "autoAllowReadonly": true }, "write": { "allowedPaths": ["**"] } },
   "resources": [
     "file://.kiro/steering/**/*.md",
     "skill://.kiro/skills/*/SKILL.md"
   ]
 }
 ```
+Start it with `kiro-cli chat --agent bbom-agent`. Always include `"tools"`: in testing, an agent file that had `allowedTools` but no `tools` field made the model announce actions ("Let me read the skill") and stop without executing any. If the agent only narrates and never acts, check that field first.
 - Hook: a file `.kiro/hooks/bbom-check.json` (workspace hooks work in the IDE and the CLI). The format below follows the example in Kiro's hooks page; `PostFileSave` runs after the agent saves or edits a file. Kiro's docs do not say what a non-zero exit does, so keep `|| true` until you have seen how it behaves in your version.
 ```json
 {

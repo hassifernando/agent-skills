@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 300" width="1200" height="300" role="img" aria-labelledby="t d">
+  <title id="t">agent-skills</title>
+  <desc id="d">Portable Agent Skills for architecture work: audit a codebase, then keep it from degrading.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0f172a"/>
+      <stop offset="1" stop-color="#1e293b"/>
+    </linearGradient>
+    <linearGradient id="acc" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#38bdf8"/>
+      <stop offset="1" stop-color="#34d399"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="300" rx="18" fill="url(#bg)"/>
+  <g transform="translate(70 70)" fill="none" stroke="url(#acc)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="0" y="0" width="160" height="160" rx="22"/>
+    <path d="M30 100 L30 60 L70 60 M70 60 L70 100 M70 60 L110 60 L110 100 M100 130 L130 130"/>
+    <circle cx="30" cy="110" r="9" fill="#0f172a"/>
+    <circle cx="70" cy="110" r="9" fill="#0f172a"/>
+    <circle cx="110" cy="110" r="9" fill="#0f172a"/>
+  </g>
+  <text x="280" y="125" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="64" font-weight="700" fill="#f8fafc">agent-skills</text>
+  <text x="282" y="172" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="26" fill="#cbd5e1">Audit a codebase. Then keep it from rotting.</text>
+  <g font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="20" font-weight="600">
+    <rect x="282" y="205" width="190" height="42" rx="21" fill="#0c4a6e"/>
+    <text x="377" y="233" text-anchor="middle" fill="#7dd3fc">bbom-audit</text>
+    <rect x="488" y="205" width="210" height="42" rx="21" fill="#064e3b"/>
+    <text x="593" y="233" text-anchor="middle" fill="#6ee7b7">bbom-prevent</text>
+    <rect x="714" y="205" width="300" height="42" rx="21" fill="#334155"/>
+    <text x="864" y="233" text-anchor="middle" fill="#e2e8f0">Agent Skills format · MIT</text>
+  </g>
+</svg>
