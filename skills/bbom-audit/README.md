@@ -21,6 +21,33 @@ Do an architecture audit of this project and tell me if it's a big ball of mud. 
 
 The report follows 14 sections plus a self-contained "Summary for External Review", in the language of your request. Every finding is labeled Confirmed, Probable or Unverified. What could not be measured is listed under "Information gaps".
 
+### Install and audit in one prompt
+
+Check that `git status` is clean, open your agent in the project root, and paste:
+
+```text
+Install the bbom-audit skill from https://github.com/hassifernando/agent-skills and use it to audit this project.
+
+STEP 1: Install
+- Clone the repository into a temporary directory outside this project, then read AGENTS.md from that clone and follow it.
+- Copy skills/bbom-audit, the whole folder, into the skills directory of the harness I am using: .claude/skills/ for Claude Code, .kiro/skills/ for Kiro. If you are not sure which harness this is, ask me.
+- Run the verification steps from AGENTS.md and show me the real output.
+
+STEP 2: Audit (read-only)
+- Use the bbom-audit skill to audit this project and tell me whether it is a big ball of mud.
+- Write the report to ./audit-report.md, in my language.
+- Write repo_stats.py's JSON output outside the project.
+
+RULES
+- Do not modify any project file other than adding the skill folder and ./audit-report.md.
+- Do not commit or push anything.
+- Never copy secret values from .env or similar files into the report.
+
+FINISH with the list of files created (from git status) and the top 5 findings.
+```
+
+The report may quote your code. Review it before committing it anywhere. In Kiro CLI, use an agent that has a `tools` field (see the [repository README](../../README.md#kiro-cli-notes)).
+
 ## Sample output
 
 An excerpt from a run on a deliberately messy 36-line Flask/SQLite fixture (`evals/audits-messy-toy-shop`):

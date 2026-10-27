@@ -63,7 +63,7 @@ Run these and report the real output to the user. Do not claim success without t
 ## Add a skill to this repository
 
 1. Create `skills/<name>/SKILL.md`. The folder name must equal `name`. Frontmatter needs `name`, `description` (1 to 1024 characters), `license: MIT`, and `metadata` with `category` and `version` (a quoted string, for example `"0.1.0"`).
-2. Add `skills/<name>/README.md` with what the skill does, what it writes to the user's project, example prompts, and an "Instructions for AI agents" section. Put any diagram or sample output in `skills/<name>/docs/`. Do not edit `docs/banner.svg` for a new skill.
+2. Add `skills/<name>/README.md` with what the skill does, what it writes to the user's project, example prompts, ready-to-paste prompts (install plus first use), and an "Instructions for AI agents" section. Put any diagram or sample output in `skills/<name>/docs/`. Do not edit `docs/banner.svg` for a new skill.
 3. Run `python3 scripts/build_catalog.py`. It rewrites the skills table in `README.md` and fails if a skill is invalid. Then run `python3 scripts/build_catalog.py --check`. Expected: `catalog up to date`.
 4. Run the tests: `cd scripts && python3 -m unittest test_build_catalog`, plus the tests of any skill you changed. Expected: `OK`.
 5. Commit locally. Tag a release as `<name>-v<version>`.

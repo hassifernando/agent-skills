@@ -26,6 +26,36 @@ Then, before structural work: `I'm adding a payments module. Run the bbom-preven
 
 By hand, `/bbom-prevent` invokes it where the harness has slash commands. To make it active without being asked, install the steering file or snippet and wire `scripts/bbom_check.py` into CI or a hook (see `references/wiring.md`).
 
+### Install and set up in one prompt
+
+Check that `git status` is clean, open your agent in the project root, and paste. If you already ran [`bbom-audit`](../bbom-audit) and have an `audit-report.md`, the agent bases the boundary rules on it.
+
+```text
+Install the bbom-prevent skill from https://github.com/hassifernando/agent-skills and set it up for this project.
+
+STEP 1: Install
+- Clone the repository into a temporary directory outside this project, then read AGENTS.md from that clone and follow it.
+- Copy skills/bbom-prevent, the whole folder, into the skills directory of the harness I am using: .claude/skills/ for Claude Code, .kiro/skills/ for Kiro. If you are not sure which harness this is, ask me.
+- Run the verification steps from AGENTS.md and show me the real output.
+
+STEP 2: Set up the ratchet (I authorize these writes, and only these)
+- Use the bbom-prevent skill. If ./audit-report.md exists, base the boundary rules in .bbom/rules.json on it. Otherwise base them only on imports you verified in the code. Do not invent boundaries.
+- Create: .bbom/, docs/ARCHITECTURE.md, docs/adr/, and tools/bbom_check.py (copied from the skill).
+- Claude Code: append the snippet from skills/bbom-prevent/assets/agent-instructions-snippet.md to CLAUDE.md (create it if missing), and add a Stop hook to .claude/settings.json that runs "python3 tools/bbom_check.py check . || true". If that file exists, merge into it and keep what is there.
+- Kiro: copy skills/bbom-prevent/assets/kiro-steering.md to .kiro/steering/architecture.md, and create .kiro/hooks/bbom-check.json following the Kiro section of skills/bbom-prevent/references/wiring.md. Do not touch existing hooks.
+- Keep every hook non-blocking (|| true).
+- Run "python3 tools/bbom_check.py check ." once and show me the output.
+
+RULES
+- Do not commit or push anything, and do not change any file outside the list above.
+- Do not edit .bbom/baseline.json by hand or loosen the rules to make a check pass.
+- Never copy secret values from .env or similar files into any file.
+
+FINISH with: the files created or changed (from git status), the boundary rules you wrote marked as a first draft I must review, whether you could confirm the hook format, and how to make the hook blocking later.
+```
+
+Review `.bbom/rules.json` with your team before trusting it, and keep the hook non-blocking until the baseline has stayed quiet on real work. In Kiro CLI, use an agent that has a `tools` field (see the [repository README](../../README.md#kiro-cli-notes)).
+
 ## What it does not do
 
 Cycles are detected for Python and JS/TS only. Other languages are reported as "not analysed", never as clean. Boundaries are line-by-line regexes. It does not measure cohesion or semantic duplication. That is the judgment step before a change, and `bbom-audit` covers a full diagnosis.

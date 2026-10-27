@@ -14,7 +14,7 @@ Skills here follow the open `SKILL.md` format, so one folder works in any harnes
 
 ## Skills
 
-This table is generated from each skill's `SKILL.md` by `scripts/build_catalog.py`. Open a skill's folder for its README, with usage, a sample, and instructions for agents.
+This table is generated from each skill's `SKILL.md` by `scripts/build_catalog.py`. Open a skill's folder for its README, with ready-to-paste prompts, usage, and instructions for agents.
 
 <!-- skills:start -->
 | Skill | Category | Version | What it does |
@@ -44,6 +44,21 @@ Requirements: `python3` (standard library only) for the skills' scripts. `git` i
    ```
 
 3. Ask your agent for the task the skill covers, in plain language. Each skill's README lists example prompts. The agent should name the skill and read its `SKILL.md` first.
+
+### Or paste a prompt
+
+Open your agent in the project root, check that `git status` is clean, and paste this. Replace `<skill-names>` with the skills you want (for example `bbom-audit`). Each skill's README has more prompts that install and run it in one go.
+
+```text
+Install these skills from https://github.com/hassifernando/agent-skills into this project: <skill-names>.
+
+- Clone the repository into a temporary directory outside this project, then read AGENTS.md from that clone and follow it.
+- Copy each skill folder, whole, into the skills directory of the harness I am using: .claude/skills/ for Claude Code, .kiro/skills/ for Kiro. If you are not sure which harness this is, ask me.
+- Run the verification steps from AGENTS.md and show me the real output.
+- Do not create any other file, do not run the skills, and do not commit anything.
+```
+
+Using Kiro CLI? Run it with an agent that has a `tools` field. See [Kiro CLI notes](#kiro-cli-notes).
 
 ### Where each harness looks for skills
 
