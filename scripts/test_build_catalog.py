@@ -61,9 +61,18 @@ class CatalogTests(unittest.TestCase):
         code, _ = self.run_main({"a-skill": "name: a-skill\ndescription: Hi there."})
         self.assertEqual(code, 1)
 
-    def test_groups_by_category(self):
+    def test_groups_by_category_before_name(self):
+        # names and categories sort in opposite orders, so a name-only sort would fail this
         skills = {
-            "b-skill": GOOD.format(n="b-skill").replace("demo", "zeta"),
+            "a-skill": GOOD.format(n="a-skill").replace("demo", "zeta"),
+            "b-skill": GOOD.format(n="b-skill").replace("demo", "alpha"),
+        }
+        _, readme = self.run_main(skills)
+        self.assertLess(readme.index("b-skill"), readme.index("a-skill"))
+
+    def test_name_orders_skills_within_a_category(self):
+        skills = {
+            "b-skill": GOOD.format(n="b-skill").replace("demo", "alpha"),
             "a-skill": GOOD.format(n="a-skill").replace("demo", "alpha"),
         }
         _, readme = self.run_main(skills)
