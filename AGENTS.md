@@ -16,7 +16,7 @@ Requirements for the skills' scripts: `python3` (standard library only). `git` i
 
 | Harness | Project directory | Notes |
 |---|---|---|
-| Kiro (IDE and CLI) | `.kiro/skills/<skill>/` | `~/.kiro/skills/` is IDE only. For the CLI, use the project directory. |
+| Kiro (IDE and CLI) | `.kiro/skills/<skill>/` | Kiro's skills page lists `~/.kiro/skills/` as IDE only. For the CLI, use the project directory. |
 | Claude Code | `.claude/skills/<skill>/` | Personal: `~/.claude/skills/<skill>/`. |
 | Any other harness | see that harness's documentation | Not tested here. Do not assume the path. |
 
@@ -32,7 +32,8 @@ cp -R /path/to/agent-skills/skills/<skill-name> .claude/skills/
 ## Kiro CLI: custom agents and tools
 
 - The default Kiro agent loads skills from `.kiro/skills/` automatically.
-- A custom agent must list the skills in `resources`, and **must have a `tools` field**. An agent file with `allowedTools` but no `tools` made the model announce actions and stop without running any tool. Do not edit the user's existing agent files. Propose a change and wait for approval, or create a separate project agent.
+- Kiro's docs disagree on whether a custom agent gets skills by default (skills page: no; configuration reference: it inherits default resources). List the skills in `resources`; that is safe either way.
+- A custom agent should have a `tools` field. On `kiro-cli` 2.34.2, an agent file with `allowedTools` but no `tools` made the model announce actions and stop without running any tool. The configuration reference calls `allowedTools` a CLI 2.x field and says CLI 3.0 uses `permissions.rules`, so re-check after upgrading. Do not edit the user's existing agent files. Propose a change and wait for approval, or create a separate project agent.
 
 ```json
 {
@@ -66,7 +67,7 @@ Run these and report the real output to the user. Do not claim success without t
 2. Add `skills/<name>/README.md` with what the skill does, what it writes to the user's project, example prompts, ready-to-paste prompts (install plus first use), and an "Instructions for AI agents" section. Put any diagram or sample output in `skills/<name>/docs/`. Do not edit `docs/banner.svg` for a new skill.
 3. Run `python3 scripts/build_catalog.py`. It rewrites the skills table in `README.md` and fails if a skill is invalid. Then run `python3 scripts/build_catalog.py --check`. Expected: `catalog up to date`.
 4. Run the tests: `cd scripts && python3 -m unittest test_build_catalog`, plus the tests of any skill you changed. Expected: `OK`.
-5. Commit locally. Tag a release as `<name>-v<version>`.
+5. Stop here. Commit only if the user asked for a commit in that message, and create a release tag (`<name>-v<version>`) only if they asked for the tag.
 
 ## Rules for working in this repository
 
