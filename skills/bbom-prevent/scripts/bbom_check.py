@@ -2,9 +2,11 @@
 """Architecture ratchet: stops a codebase from getting structurally worse.
 
 Standard library only; language-agnostic. Reads the project, writes only inside `.bbom/`.
+Symlinks are never followed: a symlinked source file is skipped and a symlinked `.bbom/` is refused.
 
     bbom_check.py init   [REPO]   create .bbom/rules.json and .bbom/baseline.json from today's state
     bbom_check.py check  [REPO]   exit 1 if the structure got worse than the baseline
+    bbom_check.py check  [REPO] --stop-hook   same, for a Claude Code Stop hook: exit 2 with the report on stderr
     bbom_check.py ratchet [REPO]  lower the baseline where things improved (never raises it)
     bbom_check.py accept [REPO] --reason "..."   record a deliberate regression in the baseline
 
@@ -28,15 +30,17 @@ import fnmatch
 import json
 import os
 import re
+import stat
 import subprocess
 import sys
+import tempfile
 from collections import Counter
 
 DEFAULT_RULES = {
     "size_threshold_lines": 400,
     "growth_tolerance_lines": 20,
     "code_extensions": [
-        ".py", ".js", ".jsx", ".mjs", ".ts", ".tsx", ".java", ".kt", ".go", ".rs", ".rb", ".php",
+        ".py", ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts", ".java", ".kt", ".go", ".rs", ".rb", ".php",
         ".cs", ".swift", ".c", ".h", ".cpp", ".cc", ".hpp", ".scala", ".vue", ".svelte", ".sh", ".sql",
     ],
     "ignore_globs": [
@@ -85,18 +89,24 @@ def matches_any(rel, globs):
     return any(glob_to_regex(g).match(rel) for g in globs)
 
 
+def is_regular_file(path):
+    """A real file, not a symlink: following links could read outside the repository."""
+    return os.path.isfile(path) and not os.path.islink(path)
+
+
 def list_files(repo):
     try:
         out = subprocess.run(
             ["git", "-C", repo, "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
             capture_output=True, text=True, timeout=60, check=True,
         ).stdout
-        return [p for p in out.split("\0") if p and os.path.isfile(os.path.join(repo, p))]
+        return [p for p in out.split("\0") if p and is_regular_file(os.path.join(repo, p))]
     except (OSError, subprocess.SubprocessError):
         files = []
         for dp, dns, fns in os.walk(repo):
             dns[:] = [d for d in dns if d not in {".git", "node_modules", ".venv", "venv", "__pycache__"}]
-            files += [os.path.relpath(os.path.join(dp, f), repo).replace(os.sep, "/") for f in fns]
+            files += [os.path.relpath(os.path.join(dp, f), repo).replace(os.sep, "/")
+                      for f in fns if is_regular_file(os.path.join(dp, f))]
         return files
 
 
@@ -125,7 +135,13 @@ def code_files(repo, rules):
 
 
 PY_EXT = {".py"}
-JS_EXT = {".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".vue", ".svelte"}
+JS_EXT = {".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts", ".vue", ".svelte"}
+# TypeScript resolves an emitted `.js` specifier to the `.ts` source (and `.mjs` to `.mts`, ...)
+JS_TO_TS = {".js": (".ts", ".tsx"), ".jsx": (".tsx",), ".mjs": (".mts",), ".cjs": (".cts",)}
+# strings first, so `//` inside a URL string is not a comment; comments become whitespace
+JS_TOKEN = re.compile(
+    r"""'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"|`(?:\\.|[^`\\])*`|//[^\n]*|/\*.*?\*/""", re.S
+)
 JS_IMPORT = re.compile(
     r"""(?:^|[;\s])(?:import|export)\s+(?!type\b)[^'"]*?from\s*['"]([^'"]+)['"]"""
     r"""|(?:^|[;\s])import\s*['"]([^'"]+)['"]"""
@@ -209,58 +225,92 @@ class _ImportCollector(ast.NodeVisitor):
 
 
 def py_edges(repo, rel, index, skip_functions=False):
+    """Returns (files this file depends on, parsed). parsed is False when the file could not be read
+    or parsed, so the caller can say the analysis is incomplete instead of treating it as dependency-free."""
     try:
-        with open(os.path.join(repo, rel), encoding="utf-8", errors="ignore") as fh:
-            tree = ast.parse(fh.read())
-    except (SyntaxError, ValueError, OSError):
-        return set()
+        with open(os.path.join(repo, rel), "rb") as fh:
+            tree = ast.parse(fh.read())  # bytes: honours BOM and `# coding:` declarations
+    except (SyntaxError, ValueError, OSError, RecursionError, MemoryError):
+        return set(), False
     col = _ImportCollector(skip_functions)
     col.visit(tree)
     out = set()
     pkg = rel.split("/")[:-1]
+    known = set(index.values())
+
+    def resolve(dotted, relative):
+        # relative imports resolve from the importing file's own tree, absolute through the index
+        target = index.get(dotted)
+        if target is None and relative:
+            for ext in ("", "/__init__"):
+                p = dotted.replace(".", "/") + ext + ".py"
+                if p in known:
+                    return p
+        return target
+
+    def inside(init):
+        """True when rel lives in the package whose initializer is `init` (that package is already loaded)."""
+        folder = os.path.dirname(init)
+        return not folder or rel.startswith(folder + "/")
+
+    def add_module(dotted, relative):
+        target = resolve(dotted, relative)
+        if target is None:
+            return False
+        parts = dotted.split(".")
+        for i in range(1, len(parts)):  # importing a.b.c runs a/__init__ and a/b/__init__ first
+            init = resolve(".".join(parts[:i]), relative)
+            if init and init.endswith("__init__.py") and init != rel and not inside(init):
+                out.add(init)
+        if target != rel:
+            out.add(target)
+        return True
+
     for level, mod, names in col.found:
         if level:
             base = pkg[: len(pkg) - (level - 1)] if level - 1 <= len(pkg) else []
-            prefix = ".".join(base + ([mod] if mod else []))
-            roots = [prefix]
+            root = ".".join(base + ([mod] if mod else []))
         else:
-            roots = [mod]
-        for root in roots:
-            cands = [f"{root}.{n}" if root else n for n in names] + [root]
-            for c in cands:
-                # relative imports resolve from the importing file's own tree, absolute through the index
-                target = index.get(c)
-                if target is None and level:
-                    for ext in ("", "/__init__"):
-                        p = c.replace(".", "/") + ext + ".py"
-                        if p in index.values():
-                            target = p
-                            break
-                if target and target != rel:
-                    out.add(target)
-                    if c != root:
-                        break
-    return out
+            root = mod
+        if not root:
+            continue
+        if not names:
+            add_module(root, level)
+            continue
+        for n in names:  # each name is its own submodule, or else an attribute of `root`
+            if not add_module(f"{root}.{n}", level):
+                add_module(root, level)
+    return out, True
+
+
+def strip_js_comments(text):
+    def blank(m):
+        t = m.group(0)
+        return t if t[0] in "'\"`" else " " + "\n" * t.count("\n")
+    return JS_TOKEN.sub(blank, text)
 
 
 def js_edges(repo, rel, fileset):
+    """Returns (files this file depends on, parsed). See py_edges."""
     try:
         with open(os.path.join(repo, rel), encoding="utf-8", errors="ignore") as fh:
-            text = fh.read()
+            text = strip_js_comments(fh.read())
     except OSError:
-        return set()
+        return set(), False
     out, here = set(), os.path.dirname(rel)
     for m in JS_IMPORT.finditer(text):
         spec = next((g for g in m.groups() if g), "")
         if not spec.startswith("."):
             continue  # package or alias import: not resolved here
         base = os.path.normpath(os.path.join(here, spec)).replace(os.sep, "/")
-        for cand in [base] + [base + e for e in sorted(JS_EXT)] + [base + "/index" + e for e in sorted(JS_EXT)]:
+        ext = os.path.splitext(base)[1]
+        swapped = [base[: -len(ext)] + e for e in JS_TO_TS.get(ext, ())]
+        for cand in [base] + swapped + [base + e for e in sorted(JS_EXT)] + [base + "/index" + e for e in sorted(JS_EXT)]:
             if cand in fileset:
                 if cand != rel:
                     out.add(cand)
                 break
-    return out
+    return out, True
 
 
 def scc(graph):
@@ -296,25 +346,35 @@ def scc(graph):
 
 
 def find_cycles(repo, rules):
-    """Returns (cycles, analysed_languages, not_analysed {ext: file count})."""
+    """Returns (cycles, analysed_languages, not_analysed {ext: file count}, files that could not be parsed)."""
     if not rules.get("detect_import_cycles", True):
-        return [], [], {}
+        return [], [], {}, []
     files = list(code_files(repo, rules))
     py = [f for f in files if os.path.splitext(f)[1].lower() in PY_EXT]
     js = [f for f in files if os.path.splitext(f)[1].lower() in JS_EXT]
     other = Counter(os.path.splitext(f)[1].lower() for f in files if f not in set(py) | set(js))
-    graph = {}
+    graph, failed = {}, []
+    load_time = rules.get("cycle_scope") == "load-time"
     if py:
         index = py_module_index(py)
         for f in py:
-            graph.setdefault(f, set()).update(py_edges(repo, f, index, rules.get("cycle_scope") == "load-time"))
+            edges, ok = py_edges(repo, f, index, load_time)
+            graph.setdefault(f, set()).update(edges)
+            if not ok:
+                failed.append(f)
     if js:
         fs = set(js)
         for f in js:
-            graph.setdefault(f, set()).update(js_edges(repo, f, fs))
-    langs = (["Python"] if py else []) + (["JavaScript/TypeScript"] if js else [])
+            edges, ok = js_edges(repo, f, fs)
+            graph.setdefault(f, set()).update(edges)
+            if not ok:
+                failed.append(f)
+    js_label = "JavaScript/TypeScript"
+    if load_time:
+        js_label += " (all imports counted: cycle_scope load-time applies to Python only)"
+    langs = (["Python"] if py else []) + ([js_label] if js else [])
     skip = {e: c for e, c in other.items() if e not in {".sh", ".sql", ".css", ".scss", ".html"}}
-    return scc(graph), langs, skip
+    return scc(graph), langs, skip, sorted(failed)
 
 
 def measure(repo, rules):
@@ -340,13 +400,21 @@ def measure(repo, rules):
             if hits:
                 boundary.setdefault(b["name"], {})[rel] = hits
     top = sorted({r.split("/")[0] for r in list_files(repo) if "/" in r and not r.startswith(".")})
-    cycles, langs, skipped = find_cycles(repo, rules)
+    cycles, langs, skipped, failed = find_cycles(repo, rules)
     return {"big_files": big, "boundary_violations": boundary, "top_level_dirs": top,
-            "cycles": cycles, "_cycle_languages": langs, "_cycle_not_analysed": skipped}
+            "cycles": cycles, "_cycle_languages": langs, "_cycle_not_analysed": skipped,
+            "_cycle_failed": failed}
+
+
+def refuse_symlinks(*paths):
+    for p in paths:
+        if os.path.islink(p):
+            sys.exit(f"Refusing to use {p}: it is a symlink. .bbom/ must hold real files inside the repository.")
 
 
 def load(repo):
     base = os.path.join(repo, ".bbom")
+    refuse_symlinks(base, os.path.join(base, "rules.json"), os.path.join(base, "baseline.json"))
     try:
         with open(os.path.join(base, "rules.json"), encoding="utf-8") as fh:
             rules = json.load(fh)
@@ -358,9 +426,25 @@ def load(repo):
 
 
 def save(base, name, data):
-    with open(os.path.join(base, name), "w", encoding="utf-8") as fh:
-        json.dump(data, fh, indent=2, sort_keys=True)
-        fh.write("\n")
+    """Write `name` inside `base` atomically: the old file stays intact if anything fails midway."""
+    dest = os.path.join(base, name)
+    refuse_symlinks(base, dest)
+    payload = json.dumps(data, indent=2, sort_keys=True) + "\n"  # serialize before touching the disk
+    mode = stat.S_IMODE(os.stat(dest).st_mode) if os.path.exists(dest) else 0o644
+    fd, tmp = tempfile.mkstemp(dir=base, prefix="." + name + ".", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(payload)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.chmod(tmp, mode)
+        os.replace(tmp, dest)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def violations(rules, baseline, now):
@@ -396,7 +480,7 @@ def violations(rules, baseline, now):
     return out
 
 
-def improvements(baseline, now):
+def improvements(baseline, now, cycles_complete=True):
     new = json.loads(json.dumps(baseline))
     changed = []
     for rel in list(new["big_files"]):
@@ -416,24 +500,41 @@ def improvements(baseline, now):
                     files[rel] = cur
                 else:
                     del files[rel]
-    if "cycles" in new:
+    if "cycles" in new and cycles_complete:
         old = [set(c) for c in new["cycles"]]
         kept = [c for c in now["cycles"] if any(set(c) <= o for o in old)]
         if kept != new["cycles"]:
             changed.append(f"import cycles: {len(new['cycles'])} -> {len(kept)} "
                            f"({sum(len(c) for c in new['cycles'])} -> {sum(len(c) for c in kept)} files involved)")
             new["cycles"] = kept
-    new["top_level_dirs"] = [d for d in new["top_level_dirs"] if d in now["top_level_dirs"]]
+    gone = [d for d in new["top_level_dirs"] if d not in now["top_level_dirs"]]
+    for d in gone:
+        changed.append(f"top-level directory '{d}/' no longer exists")
+    new["top_level_dirs"] = [d for d in new["top_level_dirs"] if d not in gone]
     return new, changed
 
 
-def cycle_coverage(langs, skipped):
+def cycle_coverage(langs, skipped, failed=()):
     if not langs and not skipped:
         return "Import-cycle detection: off or no code found."
     msg = "Import-cycle detection covers: " + (", ".join(langs) or "nothing") + "."
     if skipped:
         msg += " NOT analysed (no resolver): " + ", ".join(f"{e} ({n})" for e, n in sorted(skipped.items())) + "."
+    if failed:
+        shown = ", ".join(failed[:10]) + (f" (+{len(failed) - 10} more)" if len(failed) > 10 else "")
+        msg += (f" NOT parsed (analysis incomplete, so cycles through these files are invisible and `ratchet` "
+                f"will not lower the cycle baseline): {shown}.")
     return msg
+
+
+def stop_hook_active():
+    """True when Claude Code says it is already continuing because a Stop hook blocked once."""
+    if sys.stdin is None or sys.stdin.isatty():
+        return False
+    try:
+        return bool(json.load(sys.stdin).get("stop_hook_active"))
+    except (ValueError, OSError, AttributeError):
+        return False
 
 
 def main():
@@ -441,12 +542,15 @@ def main():
     ap.add_argument("cmd", choices=["init", "check", "ratchet", "accept"])
     ap.add_argument("repo", nargs="?", default=".")
     ap.add_argument("--reason", help="required for accept: why this regression is deliberate")
+    ap.add_argument("--stop-hook", action="store_true",
+                    help="check only: act as a Claude Code Stop hook (exit 2 + stderr blocks the stop once)")
     args = ap.parse_intermixed_args()  # lets `accept --reason "..." REPO` work on Python 3.9 too
     repo = os.path.abspath(args.repo)
     stamp = datetime.date.today().isoformat()
 
     if args.cmd == "init":
         base = os.path.join(repo, ".bbom")
+        refuse_symlinks(base, os.path.join(base, "rules.json"), os.path.join(base, "baseline.json"))
         if os.path.exists(os.path.join(base, "baseline.json")):
             sys.exit(".bbom/baseline.json already exists; refusing to overwrite it. Use ratchet or accept.")
         os.makedirs(base, exist_ok=True)
@@ -458,18 +562,24 @@ def main():
             save(base, "rules.json", rules)
         now = measure(repo, rules)
         langs, skipped = now.pop("_cycle_languages"), now.pop("_cycle_not_analysed")
+        failed = now.pop("_cycle_failed")
         now["created"] = stamp
         now["history"] = []
         save(base, "baseline.json", now)
         print(f"Baseline written: {len(now['big_files'])} file(s) over {rules['size_threshold_lines']} lines, "
               f"{len(now['cycles'])} import cycle(s), {len(now['top_level_dirs'])} top-level dir(s).")
-        print(cycle_coverage(langs, skipped))
-        print("Edit .bbom/rules.json to declare this project's real boundaries, then commit .bbom/.")
+        print(cycle_coverage(langs, skipped, failed))
+        print("Edit .bbom/rules.json to declare this project's real boundaries. .bbom/ is meant to be committed once reviewed.")
         return
 
+    if args.stop_hook and (args.cmd != "check" or stop_hook_active()):
+        if args.cmd != "check":
+            sys.exit("--stop-hook only applies to `check`.")
+        return  # already continuing because of this hook: let the turn end instead of looping
     base, rules, baseline = load(repo)
     now = measure(repo, rules)
     langs, skipped = now.pop("_cycle_languages"), now.pop("_cycle_not_analysed")
+    failed = now.pop("_cycle_failed")
     bad = violations(rules, baseline, now)
     if "cycles" not in baseline and rules.get("detect_import_cycles", True) and args.cmd == "check":
         print("Note: this baseline predates cycle detection. Run `accept --reason \"adopt cycle detection\"` once "
@@ -477,17 +587,23 @@ def main():
 
     if args.cmd == "check":
         if bad:
-            print(f"Architecture check FAILED ({len(bad)}):")
-            for v in bad:
-                print("  - " + v)
+            report = f"Architecture check FAILED ({len(bad)}):\n" + "\n".join("  - " + v for v in bad)
+            report += "\n" + cycle_coverage(langs, skipped, failed)
+            if args.stop_hook:
+                print("Your last change made the structure worse. Fix it, or record a deliberate exception with "
+                      "`accept --reason`.\n" + report, file=sys.stderr)
+                sys.exit(2)  # Claude Code: exit 2 on Stop blocks the stop and feeds stderr to the model
+            print(report)
             sys.exit(1)
-        _, better = improvements(baseline, now)
+        _, better = improvements(baseline, now, not failed)
         print("Architecture check passed." + (f" {len(better)} improvement(s) can be locked in with `ratchet`." if better else ""))
-        print(cycle_coverage(langs, skipped))
+        print(cycle_coverage(langs, skipped, failed))
     elif args.cmd == "ratchet":
         if bad:
             sys.exit("Refusing to ratchet while violations exist; fix them or use `accept`.")
-        new, better = improvements(baseline, now)
+        new, better = improvements(baseline, now, not failed)
+        if failed:
+            print(cycle_coverage(langs, skipped, failed))
         if not better:
             print("Nothing to lock in.")
             return
