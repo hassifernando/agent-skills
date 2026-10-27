@@ -2,7 +2,8 @@
 """Architecture ratchet: stops a codebase from getting structurally worse.
 
 Standard library only; language-agnostic. Reads the project, writes only inside `.bbom/`.
-Symlinks are never followed: a symlinked source file is skipped and a symlinked `.bbom/` is refused.
+Symlinks: source files that are symlinks, or sit under a symlinked directory, are skipped; a symlinked
+`.bbom/` or state file is refused. On POSIX state is written through a no-follow directory handle.
 
     bbom_check.py init   [REPO]   create .bbom/rules.json and .bbom/baseline.json from today's state
     bbom_check.py check  [REPO]   exit 1 if the structure got worse than the baseline
@@ -89,24 +90,36 @@ def matches_any(rel, globs):
     return any(glob_to_regex(g).match(rel) for g in globs)
 
 
-def is_regular_file(path):
-    """A real file, not a symlink: following links could read outside the repository."""
+def is_regular_file(repo, rel, checked):
+    """A real file whose directories are all real too. A symlink, or a file under a symlinked directory,
+    could point outside the repository. `checked` caches the directories already verified."""
+    cur = repo
+    for part in rel.split("/")[:-1]:
+        cur = os.path.join(cur, part)
+        if cur not in checked:
+            checked[cur] = not os.path.islink(cur)
+        if not checked[cur]:
+            return False
+    path = os.path.join(repo, rel)
     return os.path.isfile(path) and not os.path.islink(path)
 
 
 def list_files(repo):
+    checked = {}
     try:
         out = subprocess.run(
             ["git", "-C", repo, "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
             capture_output=True, text=True, timeout=60, check=True,
         ).stdout
-        return [p for p in out.split("\0") if p and is_regular_file(os.path.join(repo, p))]
+        return [p for p in out.split("\0") if p and is_regular_file(repo, p, checked)]
     except (OSError, subprocess.SubprocessError):
         files = []
         for dp, dns, fns in os.walk(repo):
             dns[:] = [d for d in dns if d not in {".git", "node_modules", ".venv", "venv", "__pycache__"}]
-            files += [os.path.relpath(os.path.join(dp, f), repo).replace(os.sep, "/")
-                      for f in fns if is_regular_file(os.path.join(dp, f))]
+            for f in fns:
+                rel = os.path.relpath(os.path.join(dp, f), repo).replace(os.sep, "/")
+                if is_regular_file(repo, rel, checked):
+                    files.append(rel)
         return files
 
 
@@ -138,16 +151,134 @@ PY_EXT = {".py"}
 JS_EXT = {".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts", ".vue", ".svelte"}
 # TypeScript resolves an emitted `.js` specifier to the `.ts` source (and `.mjs` to `.mts`, ...)
 JS_TO_TS = {".js": (".ts", ".tsx"), ".jsx": (".tsx",), ".mjs": (".mts",), ".cjs": (".cts",)}
-# strings first, so `//` inside a URL string is not a comment; comments become whitespace
-JS_TOKEN = re.compile(
-    r"""'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"|`(?:\\.|[^`\\])*`|//[^\n]*|/\*.*?\*/""", re.S
+_JS_TOKEN = re.compile(
+    r"""(?P<ws>\s+)
+    |(?P<lc>//[^\n]*)
+    |(?P<bc>/\*.*?(?:\*/|\Z))
+    |(?P<str>'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*")
+    |(?P<id>(?:[^\W\d]|\$)[\w$]*)
+    |(?P<num>\d[\w.]*)
+    |(?P<p>.)""",
+    re.S | re.X,
 )
-JS_IMPORT = re.compile(
-    r"""(?:^|[;\s])(?:import|export)\s+(?!type\b)[^'"]*?from\s*['"]([^'"]+)['"]"""
-    r"""|(?:^|[;\s])import\s*['"]([^'"]+)['"]"""
-    r"""|\brequire\(\s*['"]([^'"]+)['"]\s*\)""",
-    re.M,
+_JS_TEMPLATE_BODY = re.compile(r"(?:\\.|[^`\\$]|\$(?!\{))*", re.S)
+# a `/` after one of these words starts a regular expression, after any other word it divides
+_JS_REGEX_AFTER_WORD = frozenset(
+    "return typeof instanceof in of new delete void throw case do else yield await".split()
 )
+
+
+def js_tokens(text):
+    """Yields (kind, value) for the significant tokens of JS/TS source: kind is id, str, num, tpl, re or p.
+    Comments and whitespace are dropped, and the inside of regex and template literals is skipped, so an
+    import-looking string or a `/*` inside a regex cannot be mistaken for code. Not a full parser: it only
+    has to stay in sync well enough to read import statements."""
+    pos, n, stack, prev = 0, len(text), [], None
+
+    def regex_allowed():
+        if prev is None:
+            return True
+        kind, val = prev
+        if kind == "id":
+            return val in _JS_REGEX_AFTER_WORD
+        if kind in ("num", "str", "tpl", "re"):
+            return False
+        return val not in (")", "]")
+
+    def template(at):
+        """Skip template text from `at`; returns (position after it, True if it stopped at a `${`)."""
+        at = _JS_TEMPLATE_BODY.match(text, at).end()
+        if text.startswith("${", at):
+            return at + 2, True
+        return min(at + 1, n), False
+
+    while pos < n:
+        m = _JS_TOKEN.match(text, pos)
+        kind, val, end = m.lastgroup, m.group(), m.end()
+        if kind in ("ws", "lc", "bc"):
+            pos = end
+            continue
+        if kind == "str":
+            tok = ("str", val[1:-1])
+        elif kind in ("id", "num"):
+            tok = (kind, val if kind == "id" else "")
+        elif val == "`":
+            end, in_expr = template(end)
+            if in_expr:
+                stack.append("t")
+            tok = ("tpl", "")
+        elif val == "/" and regex_allowed():
+            j, in_class = end, False
+            while j < n and text[j] != "\n":
+                c = text[j]
+                if c == "\\":
+                    j += 1
+                elif c == "[":
+                    in_class = True
+                elif c == "]":
+                    in_class = False
+                elif c == "/" and not in_class:
+                    break
+                j += 1
+            if j < n and text[j] == "/":
+                end = j + 1
+                while end < n and text[end].isalpha():
+                    end += 1
+                tok = ("re", "")
+            else:
+                tok = ("p", "/")  # no closing slash on this line: it was a division
+        elif val == "{":
+            stack.append("c")
+            tok = ("p", val)
+        elif val == "}":
+            if stack and stack.pop() == "t":
+                end, in_expr = template(end)  # back inside the template text
+                if in_expr:
+                    stack.append("t")
+                tok = ("tpl", "")
+            else:
+                tok = ("p", val)
+        else:
+            tok = ("p", val)
+        yield tok
+        prev, pos = tok, end
+
+
+def js_specifiers(text):
+    """Module specifiers of the import/export-from/require statements in `text` (type-only ones excluded)."""
+    toks = list(js_tokens(text))
+    out = []
+    for i, (kind, val) in enumerate(toks):
+        if kind != "id" or (i and toks[i - 1] == ("p", ".")):
+            continue
+        if val == "require":
+            if (len(toks) > i + 3 and toks[i + 1] == ("p", "(") and toks[i + 2][0] == "str"
+                    and toks[i + 3] == ("p", ")")):
+                out.append(toks[i + 2][1])
+        elif val in ("import", "export"):
+            j = i + 1
+            nxt = toks[j] if j < len(toks) else None
+            if val == "import" and nxt and nxt[0] == "str":
+                out.append(nxt[1])  # side-effect import
+                continue
+            if nxt in (("p", "("), ("p", ".")):
+                continue  # dynamic import() and import.meta
+            if nxt == ("id", "type") and toks[j + 1:j + 2] != [("id", "from")]:
+                continue  # import type ... / export type ...: no runtime dependency
+            while j < len(toks):
+                k, v = toks[j]
+                if k == "str":
+                    if toks[j - 1] == ("id", "from"):
+                        out.append(v)
+                    break
+                if k == "p" and v not in ("{", "}", ",", "*"):
+                    break  # the clause ended without a `from`
+                if k == "id" and v in ("import", "export"):
+                    break
+                j += 1
+    return out
+
+
 def _stdlib_names():
     """Top-level standard-library module names. Python < 3.10 has no sys.stdlib_module_names, so
     fall back to the interpreter's own stdlib directory plus built-ins."""
@@ -224,7 +355,7 @@ class _ImportCollector(ast.NodeVisitor):
         self.found.append((node.level, node.module or "", [a.name for a in node.names]))
 
 
-def py_edges(repo, rel, index, skip_functions=False):
+def py_edges(repo, rel, index, skip_functions=False, known=None):
     """Returns (files this file depends on, parsed). parsed is False when the file could not be read
     or parsed, so the caller can say the analysis is incomplete instead of treating it as dependency-free."""
     try:
@@ -236,7 +367,8 @@ def py_edges(repo, rel, index, skip_functions=False):
     col.visit(tree)
     out = set()
     pkg = rel.split("/")[:-1]
-    known = set(index.values())
+    if known is None:
+        known = set(index.values())
 
     def resolve(dotted, relative):
         # relative imports resolve from the importing file's own tree, absolute through the index
@@ -283,23 +415,15 @@ def py_edges(repo, rel, index, skip_functions=False):
     return out, True
 
 
-def strip_js_comments(text):
-    def blank(m):
-        t = m.group(0)
-        return t if t[0] in "'\"`" else " " + "\n" * t.count("\n")
-    return JS_TOKEN.sub(blank, text)
-
-
 def js_edges(repo, rel, fileset):
     """Returns (files this file depends on, parsed). See py_edges."""
     try:
         with open(os.path.join(repo, rel), encoding="utf-8", errors="ignore") as fh:
-            text = strip_js_comments(fh.read())
+            text = fh.read()
     except OSError:
         return set(), False
     out, here = set(), os.path.dirname(rel)
-    for m in JS_IMPORT.finditer(text):
-        spec = next((g for g in m.groups() if g), "")
+    for spec in js_specifiers(text):
         if not spec.startswith("."):
             continue  # package or alias import: not resolved here
         base = os.path.normpath(os.path.join(here, spec)).replace(os.sep, "/")
@@ -352,13 +476,15 @@ def find_cycles(repo, rules):
     files = list(code_files(repo, rules))
     py = [f for f in files if os.path.splitext(f)[1].lower() in PY_EXT]
     js = [f for f in files if os.path.splitext(f)[1].lower() in JS_EXT]
-    other = Counter(os.path.splitext(f)[1].lower() for f in files if f not in set(py) | set(js))
+    analysed = set(py) | set(js)
+    other = Counter(os.path.splitext(f)[1].lower() for f in files if f not in analysed)
     graph, failed = {}, []
     load_time = rules.get("cycle_scope") == "load-time"
     if py:
         index = py_module_index(py)
+        known = set(index.values())
         for f in py:
-            edges, ok = py_edges(repo, f, index, load_time)
+            edges, ok = py_edges(repo, f, index, load_time, known)
             graph.setdefault(f, set()).update(edges)
             if not ok:
                 failed.append(f)
@@ -426,18 +552,62 @@ def load(repo):
 
 
 def save(base, name, data):
-    """Write `name` inside `base` atomically: the old file stays intact if anything fails midway."""
+    """Write `name` inside `base` atomically: the old file stays intact if anything fails midway.
+    On POSIX the directory is opened once without following symlinks and everything else goes through that
+    handle, so swapping `.bbom/` for a symlink after the checks cannot redirect the write. Where that is not
+    available (Windows) the paths are checked but a concurrent swap while the tool runs is not defended."""
     dest = os.path.join(base, name)
     refuse_symlinks(base, dest)
     payload = json.dumps(data, indent=2, sort_keys=True) + "\n"  # serialize before touching the disk
-    mode = stat.S_IMODE(os.stat(dest).st_mode) if os.path.exists(dest) else 0o644
+    if hasattr(os, "O_NOFOLLOW") and hasattr(os, "O_DIRECTORY") and os.open in os.supports_dir_fd:
+        _save_posix(base, name, payload)
+    else:
+        _save_by_path(base, name, dest, payload)
+
+
+def _save_posix(base, name, payload):
+    try:
+        dfd = os.open(base, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    except OSError as exc:
+        sys.exit(f"Refusing to write in {base}: it is not a real directory ({exc.strerror}).")
+    tmp = f".{name}.{os.getpid()}.tmp"
+    try:
+        mode = None
+        try:
+            st = os.stat(name, dir_fd=dfd, follow_symlinks=False)
+            if stat.S_ISLNK(st.st_mode):
+                sys.exit(f"Refusing to replace {os.path.join(base, name)}: it is a symlink.")
+            mode = stat.S_IMODE(st.st_mode)
+        except FileNotFoundError:
+            pass
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o666, dir_fd=dfd)  # umask applies
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(payload)
+                fh.flush()
+                os.fsync(fh.fileno())
+                if mode is not None:
+                    os.fchmod(fh.fileno(), mode)
+            os.replace(tmp, name, src_dir_fd=dfd, dst_dir_fd=dfd)
+        except BaseException:
+            try:
+                os.unlink(tmp, dir_fd=dfd)
+            except OSError:
+                pass
+            raise
+    finally:
+        os.close(dfd)
+
+
+def _save_by_path(base, name, dest, payload):
     fd, tmp = tempfile.mkstemp(dir=base, prefix="." + name + ".", suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             fh.write(payload)
             fh.flush()
             os.fsync(fh.fileno())
-        os.chmod(tmp, mode)
+        if os.path.exists(dest):
+            os.chmod(tmp, stat.S_IMODE(os.stat(dest).st_mode))
         os.replace(tmp, dest)
     except BaseException:
         try:
@@ -545,6 +715,8 @@ def main():
     ap.add_argument("--stop-hook", action="store_true",
                     help="check only: act as a Claude Code Stop hook (exit 2 + stderr blocks the stop once)")
     args = ap.parse_intermixed_args()  # lets `accept --reason "..." REPO` work on Python 3.9 too
+    if args.stop_hook and args.cmd != "check":
+        ap.error("--stop-hook only applies to `check`")
     repo = os.path.abspath(args.repo)
     stamp = datetime.date.today().isoformat()
 
@@ -572,9 +744,7 @@ def main():
         print("Edit .bbom/rules.json to declare this project's real boundaries. .bbom/ is meant to be committed once reviewed.")
         return
 
-    if args.stop_hook and (args.cmd != "check" or stop_hook_active()):
-        if args.cmd != "check":
-            sys.exit("--stop-hook only applies to `check`.")
+    if args.stop_hook and stop_hook_active():
         return  # already continuing because of this hook: let the turn end instead of looping
     base, rules, baseline = load(repo)
     now = measure(repo, rules)

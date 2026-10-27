@@ -183,6 +183,15 @@ class IncompleteAnalysis(unittest.TestCase):
         base = jload(os.path.join(self.root, ".bbom/baseline.json"))
         self.assertEqual(base["cycles"], [["a.py", "b.py"]])
 
+    def test_ratchet_keeps_a_js_cycle_that_still_exists(self):
+        write(self.root, "x.js", "const r = /[/*]/;\nimport './y.js';\n/* end */\n")
+        write(self.root, "y.js", "import './x.js';\n")
+        cli(self.root, "init")
+        before = jload(os.path.join(self.root, ".bbom/baseline.json"))["cycles"]
+        self.assertIn(["x.js", "y.js"], before)
+        cli(self.root, "ratchet")
+        self.assertIn(["x.js", "y.js"], jload(os.path.join(self.root, ".bbom/baseline.json"))["cycles"])
+
     def test_latin1_file_with_encoding_cookie_is_parsed(self):
         with open(os.path.join(self.root, "c.py"), "wb") as fh:
             fh.write(b"# -*- coding: latin-1 -*-\nimport a\nx = '\xe9'\n")
@@ -241,6 +250,38 @@ class JsCycles(unittest.TestCase):
             found, langs, _, _ = bc.find_cycles(root, rules)
             self.assertEqual(found, [["a.js", "b.js"]])  # JS cannot tell lazy from eager
             self.assertTrue(any("Python only" in lang for lang in langs), langs)
+
+    def test_regex_literal_containing_a_comment_opener_does_not_hide_imports(self):
+        with tempfile.TemporaryDirectory() as root:
+            write(root, "a.js", "const r = /[/*]/;\nimport './b.js';\n/* end */\n")
+            write(root, "b.js", "import './a.js';\n")
+            self.assertEqual(cycles(root)[0], [["a.js", "b.js"]])
+
+    def test_nested_template_containing_a_comment_opener_does_not_hide_imports(self):
+        with tempfile.TemporaryDirectory() as root:
+            write(root, "a.js", "const t = `${`/*`}`;\nimport './b.js';\n/* end */\n")
+            write(root, "b.js", "import './a.js';\n")
+            self.assertEqual(cycles(root)[0], [["a.js", "b.js"]])
+
+    def test_import_text_inside_strings_and_templates_is_not_a_dependency(self):
+        with tempfile.TemporaryDirectory() as root:
+            write(root, "a.js", "const text = \"require('./b')\";\nconst more = `import x from './b'`;\n")
+            write(root, "b.js", "import './a';\n")
+            self.assertEqual(cycles(root)[0], [])
+
+    def test_real_imports_around_strings_division_and_templates_still_count(self):
+        with tempfile.TemporaryDirectory() as root:
+            write(root, "a.js", "const half = total / 2; // note\nconst s = `x ${half / 2} y`;\n"
+                                "const b = require('./b');\nexport * from './c';\n")
+            write(root, "b.js", "import a from './a';\n")
+            write(root, "c.js", "import { a } from './a';\n")
+            self.assertEqual(cycles(root)[0], [["a.js", "b.js", "c.js"]])
+
+    def test_method_named_require_is_not_an_import(self):
+        with tempfile.TemporaryDirectory() as root:
+            write(root, "a.js", "loader.require('./b');\n")
+            write(root, "b.js", "import './a';\n")
+            self.assertEqual(cycles(root)[0], [])
 
     def test_unsupported_language_is_reported_not_ignored(self):
         with tempfile.TemporaryDirectory() as root:
@@ -489,6 +530,99 @@ class AtomicSave(unittest.TestCase):
                 bc.save(self.base, "baseline.json", {"new": 2})
         self.assertEqual(jload(self.path), {"ok": 1})
         self.assertEqual(os.listdir(self.base), ["baseline.json"])
+
+
+class StateFilePermissions(unittest.TestCase):
+    @unittest.skipIf(os.name == "nt", "POSIX permission bits")
+    def test_new_state_file_honours_a_restrictive_umask(self):
+        with tempfile.TemporaryDirectory() as base:
+            old = os.umask(0o077)
+            try:
+                bc.save(base, "baseline.json", {"a": 1})
+            finally:
+                os.umask(old)
+            self.assertEqual(os.stat(os.path.join(base, "baseline.json")).st_mode & 0o777, 0o600)
+
+    @unittest.skipIf(os.name == "nt", "POSIX permission bits")
+    def test_existing_state_file_keeps_its_mode(self):
+        with tempfile.TemporaryDirectory() as base:
+            path = os.path.join(base, "baseline.json")
+            bc.save(base, "baseline.json", {"a": 1})
+            os.chmod(path, 0o640)
+            bc.save(base, "baseline.json", {"a": 2})
+            self.assertEqual(os.stat(path).st_mode & 0o777, 0o640)
+
+
+class CommandOptions(unittest.TestCase):
+    def test_stop_hook_is_rejected_before_init_writes_anything(self):
+        with tempfile.TemporaryDirectory() as root:
+            write(root, "a.py", "x = 1\n")
+            r = cli(root, "init", "--stop-hook")
+            self.assertNotEqual(r.returncode, 0)
+            self.assertIn("--stop-hook", r.stderr)
+            self.assertFalse(os.path.exists(os.path.join(root, ".bbom")))
+
+
+class ScanCost(unittest.TestCase):
+    def test_module_membership_is_built_once_per_scan(self):
+        class CountingIndex(dict):
+            values_calls = 0
+
+            def values(self):
+                CountingIndex.values_calls += 1
+                return super().values()
+
+        with tempfile.TemporaryDirectory() as root:
+            for i in range(40):
+                write(root, f"m{i}.py", f"import m{(i + 1) % 40}\n" if i % 2 else "x = 1\n")
+            real = bc.py_module_index
+            with mock.patch.object(bc, "py_module_index", lambda files: CountingIndex(real(files))):
+                bc.find_cycles(root, bc.DEFAULT_RULES)
+        self.assertLessEqual(CountingIndex.values_calls, 1)
+
+
+@unittest.skipUnless(can_symlink(), "symlinks unavailable")
+class LinkedAncestors(unittest.TestCase):
+    def test_git_listed_file_under_a_symlinked_directory_is_skipped(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            outside, repo = os.path.join(tmp, "outside"), os.path.join(tmp, "repo")
+            os.makedirs(outside)
+            os.makedirs(repo)
+            write(outside, "inner.py", "x = 1\n")
+            write(repo, "linked/inner.py", "x = 1\n")
+            write(repo, "real.py", "x = 1\n")
+            try:
+                subprocess.run(["git", "-C", repo, "init", "-q"], check=True)
+                subprocess.run(["git", "-C", repo, "add", "."], check=True)
+            except (OSError, subprocess.CalledProcessError):
+                self.skipTest("git unavailable")
+            shutil.rmtree(os.path.join(repo, "linked"))
+            os.symlink(outside, os.path.join(repo, "linked"))
+            listed = subprocess.run(["git", "-C", repo, "ls-files"], capture_output=True, text=True).stdout
+            self.assertIn("linked/inner.py", listed)  # git still lists it; the scanner must not follow the link
+            self.assertEqual(sorted(bc.code_files(repo, bc.DEFAULT_RULES)), ["real.py"])
+
+
+@unittest.skipUnless(can_symlink() and hasattr(os, "O_NOFOLLOW"), "needs symlinks and O_NOFOLLOW")
+class StateSwapRace(unittest.TestCase):
+    def test_swapping_the_state_directory_after_the_check_does_not_redirect_the_write(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base, outside = os.path.join(tmp, ".bbom"), os.path.join(tmp, "outside")
+            os.makedirs(base)
+            os.makedirs(outside)
+            real_refuse, swapped = bc.refuse_symlinks, []
+
+            def swap_after_check(*paths):
+                real_refuse(*paths)
+                if not swapped:
+                    swapped.append(1)
+                    os.rename(base, base + ".moved")
+                    os.symlink(outside, base)
+
+            with mock.patch.object(bc, "refuse_symlinks", swap_after_check):
+                with self.assertRaises((OSError, SystemExit)):
+                    bc.save(base, "baseline.json", {"a": 1})
+            self.assertEqual(os.listdir(outside), [])
 
 
 if __name__ == "__main__":
