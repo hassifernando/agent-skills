@@ -75,7 +75,9 @@ def walk(repo):
             if d not in SKIP_DIRS and not os.path.isfile(os.path.join(dirpath, d, ".git"))
         ]
         for name in filenames:
-            yield os.path.join(dirpath, name)
+            path = os.path.join(dirpath, name)
+            if not os.path.islink(path):  # a symlink could point outside the repository
+                yield path
 
 
 def count_lines(path):

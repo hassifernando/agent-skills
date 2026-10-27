@@ -19,3 +19,5 @@ jobs:
         run: cd scripts && python3 -m unittest test_build_catalog
       - name: bbom-prevent tests
         run: cd skills/bbom-prevent && python3 -m unittest scripts/test_bbom_check.py
+      - name: bbom-audit tests
+        run: cd skills/bbom-audit && python3 -m unittest scripts/test_repo_stats.py
