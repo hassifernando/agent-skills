@@ -103,10 +103,6 @@ cd ../skills/bbom-prevent && python3 -m unittest scripts/test_bbom_check.py
 
 Validate a skill against the [Agent Skills specification](https://agentskills.io/specification) with the reference tool `skills-ref validate ./skills/<name>` (from [agentskills/agentskills](https://github.com/agentskills/agentskills/tree/main/skills-ref)).
 
-## Related packs
-
-[addyosmani/agent-skills](https://github.com/addyosmani/agent-skills) is a general lifecycle pack (spec, build, review, ship). The architecture skills here do not replace it, and it does not replace them. Compared on 2026-10-27 from its published skill pages: it has no read-only architecture audit and no import-cycle baseline.
-
 ## License
 
 [MIT](LICENSE)
