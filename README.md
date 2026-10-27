@@ -19,8 +19,8 @@ This table is generated from each skill's `SKILL.md` by `scripts/build_catalog.p
 <!-- skills:start -->
 | Skill | Category | Version | What it does |
 |---|---|---|---|
-| [`bbom-audit`](skills/bbom-audit) | architecture | 0.1.0 | Read-only software architecture audit that decides whether a codebase is a Big Ball of Mud (BBoM) and how healthy its structure is. |
-| [`bbom-prevent`](skills/bbom-prevent) | architecture | 0.1.1 | Keeps a codebase from degrading into a Big Ball of Mud, continuously, across sessions. |
+| [`bbom-audit`](skills/bbom-audit) | architecture | 0.1.1 | Read-only software architecture audit that decides whether a codebase is a Big Ball of Mud (BBoM) and how healthy its structure is. |
+| [`bbom-prevent`](skills/bbom-prevent) | architecture | 0.2.0 | Keeps a codebase from degrading into a Big Ball of Mud, continuously, across sessions. |
 <!-- skills:end -->
 
 ## Quick start
@@ -66,13 +66,14 @@ Using Kiro CLI? Run it with an agent that has a `tools` field. See [Kiro CLI not
 |---|---|---|
 | Claude Code | `.claude/skills/<skill>/` (personal: `~/.claude/skills/`) | Evals run here (Claude Code), paths from its documentation |
 | Kiro IDE | `.kiro/skills/<skill>/` (global: `~/.kiro/skills/`) | Paths from Kiro's documentation, not tested |
-| Kiro CLI | `.kiro/skills/<skill>/` only. Global skills are IDE only. | `kiro-cli` 2.34.2 with a custom agent: `bbom-audit` and `bbom-prevent` setup (baseline, rules, steering) ran end to end on a real project. The hook file was written but not confirmed to fire |
+| Kiro CLI | `.kiro/skills/<skill>/`. Kiro's skills page lists global skills as IDE only (not tested here). | `kiro-cli` 2.34.2 with a custom agent: `bbom-audit` and `bbom-prevent` setup (baseline, rules, steering) ran end to end on a real project. The hook file was written but not confirmed to fire |
 | Cursor, GitHub Copilot, Gemini CLI, VS Code and others | see each tool's documentation | [Listed as supporting the format](https://agentskills.io/clients), untested here |
 
 ### Kiro CLI notes
 
 - The default Kiro agent loads skills from `.kiro/skills/` by itself.
-- A custom agent must list skills in `resources` **and must have a `tools` field**. In testing, an agent file with `allowedTools` but no `tools` made the model say "Let me read the skill" and stop without running anything. If your agent only narrates, check that field first.
+- Kiro's docs disagree on whether a custom agent gets skills by default (the skills page says no, the configuration reference says it inherits default resources). Listing them in `resources` is safe either way.
+- A custom agent should have a `tools` field. In testing on `kiro-cli` 2.34.2, an agent file with `allowedTools` but no `tools` made the model say "Let me read the skill" and stop without running anything. If your agent only narrates, check that field first.
 
   ```json
   {
@@ -84,8 +85,8 @@ Using Kiro CLI? Run it with an agent that has a `tools` field. See [Kiro CLI not
   ```
 
   Save it as `.kiro/agents/my-agent.json` and run `kiro-cli chat --agent my-agent`.
-- Workspace steering (`.kiro/steering/`) works in the CLI. Global steering does not.
-- Kiro CLI 3.0 was announced for the end of October 2026 with changes to hooks. Re-check any hook example after upgrading.
+- Workspace steering (`.kiro/steering/`) works in the CLI. Kiro's steering page lists global steering (`~/.kiro/steering/`) as supported in the CLI too; not tested here.
+- Everything tested here ran on `kiro-cli` 2.34.2. Kiro CLI 3.0 was announced for the end of October 2026 with changes to hooks, and its configuration reference says `allowedTools` is the 2.x field (V3 uses `permissions.rules`). Re-check these examples after upgrading.
 - Importing from GitHub in the Kiro IDE must point at a skill's subdirectory (for example `skills/bbom-audit`), not the repository root.
 
 ## Repository layout
@@ -106,7 +107,7 @@ skills/
 1. Create `skills/<name>/SKILL.md`. The folder name must equal `name`. Frontmatter needs `name`, `description` (1 to 1024 characters), `license`, and `metadata` with `category` and `version`.
 2. Add a `README.md` in the skill folder. A diagram or sample output goes in that skill's own `docs/`, so the root never needs new images.
 3. Run `python3 scripts/build_catalog.py`. It rewrites the table above and fails if a skill is invalid.
-4. Run the checks below, commit, and tag the release as `<name>-v<version>`.
+4. Run the checks below. When you decide to release, tag it as `<name>-v<version>`.
 
 ## Develop
 
@@ -114,6 +115,7 @@ skills/
 python3 scripts/build_catalog.py --check                       # skills valid, README table current
 cd scripts && python3 -m unittest test_build_catalog           # catalog script tests
 cd ../skills/bbom-prevent && python3 -m unittest scripts/test_bbom_check.py
+cd ../bbom-audit && python3 -m unittest scripts/test_repo_stats.py
 ```
 
 Validate a skill against the [Agent Skills specification](https://agentskills.io/specification) with the reference tool `skills-ref validate ./skills/<name>` (from [agentskills/agentskills](https://github.com/agentskills/agentskills/tree/main/skills-ref)).

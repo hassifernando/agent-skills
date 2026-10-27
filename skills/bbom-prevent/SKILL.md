@@ -5,7 +5,7 @@ compatibility: Requires python3 (standard library only) and, optionally, git. Fo
 description: Keeps a codebase from degrading into a Big Ball of Mud, continuously, across sessions. Before any structural change (new module, new abstraction, new dependency, new feature spanning layers, moving or splitting code) it runs a short placement-and-duplication check; after the change it runs an architecture ratchet that fails when files grow past their ceiling, module boundaries are crossed or the tree sprawls. Sets up persistent guardrails in the project (.bbom/ baseline and rules, architecture rules, ADRs, CI/pre-commit/hook wiring). Use when starting work in a project that should stay maintainable, when the user says "add a feature", "create a new module/service/helper", "where should this go?", "refactor", "keep the architecture clean", "prevent technical debt", "set up architecture guardrails/fitness functions", or when an AI agent is making many changes to the same codebase, even if they never mention Big Ball of Mud. Not for a one-off diagnosis of an existing mess (use bbom-audit for that).
 metadata:
   category: architecture
-  version: "0.1.1"
+  version: "0.2.0"
 ---
 
 # BBoM Prevent
@@ -31,10 +31,11 @@ Ask first: this writes files into the project.
 
 1. Run `python3 scripts/bbom_check.py init <repo>` (path relative to this skill's folder; use the absolute path of wherever the harness installed it, or the copy in the project). It records today's state as the baseline: which files are already too big, which boundary violations and import cycles already exist, which top-level directories exist. Existing mess is *grandfathered*, not hidden, so the check can be strict about anything new from day one without demanding a rewrite.
 2. Open `.bbom/rules.json` and replace the example boundary with the project's real ones (read `references/rules-schema.md`). Boundaries are the part that needs a human: "the listener must not import the API layer", "UI code never touches the database". Propose them from what the code already shows (the dominant direction of imports), and let the user confirm. A wrong boundary is worse than none because people learn to override it.
-3. Create the architecture rules and decision log from `assets/` (`ARCHITECTURE.md`, `adr-template.md`) in the project's docs folder, adapted to its language and layout. Keep `ARCHITECTURE.md` short: a map of modules and the allowed direction of dependencies.
-4. Add the snippet in `assets/agent-instructions-snippet.md` to the file this harness reads for standing project instructions (`CLAUDE.md`, `AGENTS.md`, or a Kiro steering file; see `assets/kiro-steering.md`) so every future session is told to follow this skill.
-5. Wire the check so it runs without anyone remembering: see `references/wiring.md` (CI job, pre-commit, and the agent hook of your harness). Suggest one; do not install a hook into the user's settings without asking.
-6. Commit `.bbom/`. The baseline is a project artifact, reviewed like code.
+3. Create the architecture rules and decision log from `assets/` (`ARCHITECTURE.md`, `adr-template.md`) in the project's docs folder, adapted to its language and layout. Keep `ARCHITECTURE.md` short: a map of modules and the allowed direction of dependencies. If the check will be vendored (`tools/bbom_check.py`, see `references/wiring.md`), copy it now.
+4. Reconcile the baseline. `init` ran before steps 2 and 3, so run `check` now. Expect exactly two kinds of failure: violations of the boundaries you just enabled that already existed, and the new top-level directories you just created (for example `docs/`, `tools/`). Show them to the user. If it is only those, record them once with `accept --reason "initial setup: existing violations of the confirmed boundaries and the setup directories"` (it is kept in the baseline history), then run `check` again and expect it to pass. If anything else fails, stop and find out why; do not accept it.
+5. Add the snippet in `assets/agent-instructions-snippet.md` to the file this harness reads for standing project instructions (`CLAUDE.md`, `AGENTS.md`, or a Kiro steering file; see `assets/kiro-steering.md`) so every future session is told to follow this skill.
+6. Wire the check so it runs without anyone remembering: see `references/wiring.md` (CI job, pre-commit, and the agent hook of your harness). Suggest one; do not install a hook into the user's settings without asking.
+7. Do not commit anything unless the user asks you to in that message. When they do, `.bbom/` is a project artifact, reviewed like code.
 
 ## Before you change (placement and duplication)
 
@@ -68,12 +69,13 @@ A guard that only runs when someone remembers it is not a guard. Treat this skil
 - **At the start of work in a project that has `.bbom/`**, read `.bbom/rules.json` and `docs/ARCHITECTURE.md` once, so the boundaries are in your head before the first edit.
 - **Before each structural change, run *Before you change* without being prompted**, and say in two or three sentences what you found. Silence means the step was skipped.
 - **After each change, run `check`** and report the result. If the project has no `.bbom/` and the work is non-trivial, suggest *Set up* once and let the user decide.
-- **For the human:** in Kiro, invoke it by hand with `/bbom-prevent` (add what you are about to do after the name); keep the steering file from `assets/kiro-steering.md` in `.kiro/steering/` so every session is told to use it; and a custom Kiro agent only sees the skill if its `resources` lists a `skill://` URI for it. `references/wiring.md` has the rest (CI, pre-commit, hook).
+- **For the human:** in Kiro, invoke it by hand with `/bbom-prevent` (add what you are about to do after the name); keep the steering file from `assets/kiro-steering.md` in `.kiro/steering/` so every session is told to use it; and for a custom Kiro agent, list `skill://.kiro/skills/*/SKILL.md` in its `resources` (Kiro's skills page says custom agents do not load skills by default, its configuration reference says they inherit default resources; listing it is what worked in the `kiro-cli` 2.34.2 test). `references/wiring.md` has the rest (CI, pre-commit, hook).
 
 ## What the check does not do
 
 Say these limits out loud when reporting, so a green check is not read as "the architecture is healthy":
-- Import cycles are detected for Python and JS/TS only. Other languages are listed as "not analysed", never as clean. Non-relative JS imports (aliases such as `@/`) are not resolved.
+- Import cycles are detected for Python and JS/TS only. Other languages are listed as "not analysed", never as clean. Non-relative JS imports (aliases such as `@/`) are not resolved, and `cycle_scope: "load-time"` applies to Python only (every JS import counts).
+- A file that cannot be parsed is listed as "NOT parsed": cycles through it are invisible, and `ratchet` will not lower the cycle baseline until it parses. Symlinks are never followed.
 - Boundaries are line-by-line regexes on source text, so they catch what they are written for and nothing else.
 - It does not measure coupling beyond cycles, cohesion, or semantic duplication (two functions doing the same thing under different names). That part is the *Before you change* judgment, and a full `bbom-audit` covers it.
 - The baseline is only as honest as the review of changes to `.bbom/`.
