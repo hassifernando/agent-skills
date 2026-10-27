@@ -126,6 +126,31 @@ class JsCycles(unittest.TestCase):
             self.assertEqual(skipped, {".java": 1})
 
 
+class InstalledToolingIgnored(unittest.TestCase):
+    """Installed skills and the vendored script must not enter the baseline."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = self.tmp.name
+        big = "x = 1\n" * 450
+        write(self.root, "app.py", "x = 1\n")
+        write(self.root, ".kiro/skills/some-skill/scripts/big.py", big)
+        write(self.root, ".claude/skills/some-skill/scripts/big.py", big)
+        write(self.root, "tools/bbom_check.py", big)
+        write(self.root, ".kiro/skills/some-skill/a.py", "import b\n")
+        write(self.root, ".kiro/skills/some-skill/b.py", "import a\n")
+        write(self.root, "tools/other.py", big)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_init_baseline_excludes_tooling_but_keeps_project_tools(self):
+        self.assertEqual(cli(self.root, "init").returncode, 0)
+        baseline = jload(os.path.join(self.root, ".bbom", "baseline.json"))
+        self.assertEqual(list(baseline["big_files"]), ["tools/other.py"])
+        self.assertEqual(baseline["cycles"], [])
+
+
 class Ratchet(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

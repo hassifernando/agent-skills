@@ -42,6 +42,8 @@ DEFAULT_RULES = {
     "ignore_globs": [
         "node_modules/**", ".venv/**", "venv/**", "dist/**", "build/**", "vendor/**", "target/**",
         "**/__pycache__/**", "**/*.min.js", "**/migrations/**", "**/generated/**", ".bbom/**",
+        # installed skills and the vendored copy of this script are tooling, not project code
+        ".kiro/**", ".claude/**", "tools/bbom_check.py", "tools/test_bbom_check.py",
     ],
     "detect_import_cycles": True,
     "cycle_scope": "all",

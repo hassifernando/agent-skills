@@ -26,7 +26,7 @@ Both are committed to the repository and reviewed like code.
 - `growth_tolerance_lines`: slack before a large file counts as having grown, so a trivial edit does not fail the check.
 - `detect_import_cycles` (default `true`): turn cycle detection off with `false`.
 - `cycle_scope` (default `"all"`): `"all"` counts imports inside functions too, since a lazy import hides a dependency without removing it; `"load-time"` counts only imports that run when the module loads. Type-only imports (`if TYPE_CHECKING:`, `import type`) never count either way. Cycles are found for Python and JS/TS; other languages are reported as "not analysed".
-- `ignore_globs`: generated, vendored and migration code. `**` crosses directories, `*` does not.
+- `ignore_globs`: generated, vendored and migration code. `**` crosses directories, `*` does not. The defaults also skip `.kiro/**`, `.claude/**` and the vendored `tools/bbom_check.py`, so installed skills and this script never enter the baseline. A project's own `tools/` code is still checked.
 - `boundaries`: each rule says "files matching `paths` must not contain a line matching `forbid_regex`". Write `why` so a person who trips it learns the reason. The regex runs line by line on the source text, so it works in any language; anchor it on import/require statements to avoid matching comments.
 
 ### Choosing boundaries
