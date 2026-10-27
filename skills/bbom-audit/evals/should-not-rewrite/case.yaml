@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: should-not-rewrite
+expected_outcome: |
+  The skill triggers even though the user never says "audit" or "big ball of mud". The answer in answer.md is proportional: it names the real problems found (circular import, duplicated rule, swallowed exception, no tests) and recommends targeted fixes and characterization tests, not microservices or a full rewrite, because a service this small does not justify them. The project is untouched.
+context:
+  scaffold_script: place-files.sh

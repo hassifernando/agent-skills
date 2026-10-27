@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: audits-messy-toy-shop
+expected_outcome: |
+  A read-only audit report in audit-report.md with the required sections, a BBoM classification justified by cited evidence (circular import between orders and billing, the VIP discount rule duplicated in three files, swallowed exception in billing.charge, no tests), a risk index, an "Unverified/not assessed" treatment of what could not be measured, and no secret value copied from .env. No file under toyshop was changed.
+context:
+  scaffold_script: place-files.sh

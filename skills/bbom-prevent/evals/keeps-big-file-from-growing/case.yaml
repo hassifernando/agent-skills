@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: keeps-big-file-from-growing
+expected_outcome: |
+  The CSV export works, and the new code goes into a new module instead of the 400+ line shop.py, which should not grow beyond a few lines. The agent says where it put the code and why, and when the project has an architecture check it runs it.
+context:
+  scaffold_script: place-files.sh

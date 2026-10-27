@@ -1,0 +1,57 @@
+{
+  "boundaries": [
+    {
+      "enabled": false,
+      "forbid_regex": "(import|from)\\s+.*\\b(db|database|repository)\\b",
+      "name": "example-ui-must-not-touch-db",
+      "paths": [
+        "src/ui/**"
+      ],
+      "why": "Replace with a real boundary of this project, then set enabled to true."
+    }
+  ],
+  "code_extensions": [
+    ".py",
+    ".js",
+    ".jsx",
+    ".mjs",
+    ".ts",
+    ".tsx",
+    ".java",
+    ".kt",
+    ".go",
+    ".rs",
+    ".rb",
+    ".php",
+    ".cs",
+    ".swift",
+    ".c",
+    ".h",
+    ".cpp",
+    ".cc",
+    ".hpp",
+    ".scala",
+    ".vue",
+    ".svelte",
+    ".sh",
+    ".sql"
+  ],
+  "cycle_scope": "all",
+  "detect_import_cycles": true,
+  "growth_tolerance_lines": 20,
+  "ignore_globs": [
+    "node_modules/**",
+    ".venv/**",
+    "venv/**",
+    "dist/**",
+    "build/**",
+    "vendor/**",
+    "target/**",
+    "**/__pycache__/**",
+    "**/*.min.js",
+    "**/migrations/**",
+    "**/generated/**",
+    ".bbom/**"
+  ],
+  "size_threshold_lines": 400
+}

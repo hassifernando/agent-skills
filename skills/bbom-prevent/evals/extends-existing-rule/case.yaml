@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: extends-existing-rule
+expected_outcome: |
+  Before editing, the agent searches for the existing discount logic and notices the VIP rule already lives in three places. It does not add a fourth copy: the loyalty discount goes in one owning place (and ideally the existing copies are pointed at it or the duplication is flagged as follow-up). The agent states where the rule belongs and why in a few sentences.
+context:
+  scaffold_script: place-files.sh

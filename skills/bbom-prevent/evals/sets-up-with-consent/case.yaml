@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: sets-up-with-consent
+expected_outcome: |
+  The agent initializes the ratchet in toyshop (.bbom/rules.json and .bbom/baseline.json), proposes real boundaries from what the code shows rather than leaving only the example, adds a short ARCHITECTURE.md and an agent-instructions snippet to the project, explains how to wire the check into CI or a hook, and does not modify global Claude settings or install a hook without saying so.
+context:
+  scaffold_script: place-files.sh
