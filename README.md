@@ -20,7 +20,7 @@ This table is generated from each skill's `SKILL.md` by `scripts/build_catalog.p
 | Skill | Category | Version | What it does |
 |---|---|---|---|
 | [`bbom-audit`](skills/bbom-audit) | architecture | 0.1.1 | Read-only software architecture audit that decides whether a codebase is a Big Ball of Mud (BBoM) and how healthy its structure is. |
-| [`bbom-prevent`](skills/bbom-prevent) | architecture | 0.2.0 | Keeps a codebase from degrading into a Big Ball of Mud, continuously, across sessions. |
+| [`bbom-prevent`](skills/bbom-prevent) | architecture | 0.2.1 | Keeps a codebase from degrading into a Big Ball of Mud, continuously, across sessions. |
 <!-- skills:end -->
 
 ## Quick start
@@ -66,7 +66,7 @@ Using Kiro CLI? Run it with an agent that has a `tools` field. See [Kiro CLI not
 |---|---|---|
 | Claude Code | `.claude/skills/<skill>/` (personal: `~/.claude/skills/`) | Evals run here (Claude Code), paths from its documentation |
 | Kiro IDE | `.kiro/skills/<skill>/` (global: `~/.kiro/skills/`) | Paths from Kiro's documentation, not tested |
-| Kiro CLI | `.kiro/skills/<skill>/`. Kiro's skills page lists global skills as IDE only (not tested here). | `kiro-cli` 2.34.2 with a custom agent: `bbom-audit` and `bbom-prevent` setup (baseline, rules, steering) ran end to end on a real project. The hook file was written but not confirmed to fire |
+| Kiro CLI | `.kiro/skills/<skill>/` (tested). Kiro's skills page also lists global `~/.kiro/skills/` as supported in the CLI (not tested here). | `kiro-cli` 2.34.2 with a custom agent: `bbom-audit` and `bbom-prevent` setup (baseline, rules, steering) ran end to end on a real project. The hook file was written but not confirmed to fire |
 | Cursor, GitHub Copilot, Gemini CLI, VS Code and others | see each tool's documentation | [Listed as supporting the format](https://agentskills.io/clients), untested here |
 
 ### Kiro CLI notes

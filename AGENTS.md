@@ -16,7 +16,7 @@ Requirements for the skills' scripts: `python3` (standard library only). `git` i
 
 | Harness | Project directory | Notes |
 |---|---|---|
-| Kiro (IDE and CLI) | `.kiro/skills/<skill>/` | Kiro's skills page lists `~/.kiro/skills/` as IDE only. For the CLI, use the project directory. |
+| Kiro (IDE and CLI) | `.kiro/skills/<skill>/` | Kiro's skills page lists `~/.kiro/skills/` as supported in the IDE and the CLI, but only the project directory was tested here. Prefer the project directory. |
 | Claude Code | `.claude/skills/<skill>/` | Personal: `~/.claude/skills/<skill>/`. |
 | Any other harness | see that harness's documentation | Not tested here. Do not assume the path. |
 

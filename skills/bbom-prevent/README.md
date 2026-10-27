@@ -43,7 +43,7 @@ STEP 2: Set up the ratchet (I authorize these writes, and only these)
 - Create: .bbom/, docs/ARCHITECTURE.md, docs/adr/, and tools/bbom_check.py (copied from the skill).
 - Claude Code: append the snippet from skills/bbom-prevent/assets/agent-instructions-snippet.md to CLAUDE.md (create it if missing), and add a Stop hook to .claude/settings.json that runs "python3 tools/bbom_check.py check . --stop-hook". If that file exists, merge into it and keep what is there.
 - Kiro: copy skills/bbom-prevent/assets/kiro-steering.md to .kiro/steering/architecture.md, and create .kiro/hooks/bbom-check.json following the Kiro section of skills/bbom-prevent/references/wiring.md. Do not touch existing hooks.
-- The Claude Code hook uses --stop-hook: it blocks the stop once with the report on stderr and cannot loop. The Kiro hook stays non-blocking (|| true) because Kiro's exit-code behavior is not verified.
+- The Claude Code hook uses --stop-hook: it blocks the stop once with the report on stderr (it lets go on the next stop when Claude Code reports `stop_hook_active`). The Kiro hook stays non-blocking (|| true) because Kiro's exit-code behavior is not verified.
 - Run "python3 tools/bbom_check.py check ." once and show me the output.
 
 RULES
@@ -58,7 +58,7 @@ Review `.bbom/rules.json` with your team before trusting it. In Kiro CLI, use an
 
 ## What it does not do
 
-Cycles are detected for Python and JS/TS only. Other languages are reported as "not analysed", never as clean. A file that cannot be parsed is reported as "NOT parsed" and keeps `ratchet` from lowering the cycle baseline. `cycle_scope: "load-time"` applies to Python only. Symlinks are never followed. Boundaries are line-by-line regexes. It does not measure cohesion or semantic duplication. That is the judgment step before a change, and `bbom-audit` covers a full diagnosis.
+Cycles are detected for Python and JS/TS only. Other languages are reported as "not analysed", never as clean. A file that cannot be parsed is reported as "NOT parsed" and keeps `ratchet` from lowering the cycle baseline. `cycle_scope: "load-time"` applies to Python only. Source files that are symlinks, or sit under a symlinked directory, are skipped, and a symlinked `.bbom/` is refused (on Windows a swap of `.bbom/` while the tool runs is not defended). Boundaries are line-by-line regexes. It does not measure cohesion or semantic duplication. That is the judgment step before a change, and `bbom-audit` covers a full diagnosis.
 
 ## Instructions for AI agents
 
