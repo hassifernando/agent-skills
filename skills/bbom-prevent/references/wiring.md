@@ -49,7 +49,7 @@ To make the skill active rather than on-demand, combine three things: the steeri
 Kiro keeps agent hooks as files in `.kiro/hooks/` (create one from Kiro's hooks panel rather than hand-writing the JSON, since the schema is Kiro's). Choose a trigger that fires after the agent changes files (for example on file save, or after a tool use) and make the action run the command above. For standing instructions use a steering file: copy `assets/kiro-steering.md` to `.kiro/steering/architecture.md`. Skills live in `.kiro/skills/<name>/` (workspace) or `~/.kiro/skills/` (global, IDE only); a custom Kiro agent only sees a skill if its `resources` lists a `skill://` URI for it.
 
 ### Codex, Cursor, Copilot, Gemini CLI and others
-Put the snippet from `assets/agent-instructions-snippet.md` in the file the tool reads (`AGENTS.md` for most), and rely on CI or pre-commit for enforcement. Those two triggers do not depend on any harness.
+Put the snippet from `assets/agent-instructions-snippet.md` in the instructions file the tool reads (check its docs; `AGENTS.md` is a common choice), and rely on CI or pre-commit for enforcement. Those two triggers do not depend on any harness.
 
 Only add any of these with the user's agreement, and tell them which file you changed.
 

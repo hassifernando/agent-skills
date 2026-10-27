@@ -36,7 +36,7 @@ Copy the skill folder you want into your harness's skills directory. The folder 
 **Claude Code**
 - Project: `.claude/skills/<skill>/`. Personal: `~/.claude/skills/<skill>/`.
 
-**Other harnesses** that read the Agent Skills format should work the same way; only Kiro and Claude Code have been checked.
+**Other harnesses.** The [Agent Skills client list](https://agentskills.io/clients) includes Cursor, GitHub Copilot, Gemini CLI, VS Code and many others. Check each one's documentation for where it looks for skills. The evals in this repository were run in Claude Code only, so other harnesses are untested.
 
 ```sh
 git clone https://github.com/hassifernando/agent-skills.git
