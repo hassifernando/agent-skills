@@ -158,6 +158,65 @@ class CheckTests(Base):
         rep = self.check()
         self.assertEqual(rep.errors, [])
 
+    def test_secret_word_in_prose_or_code_is_not_flagged(self):
+        lines = [
+            "- why: the CSRF token: middleware rejects the form",
+            "- why: o token: expirava quando o relógio mudava",
+            "- evidence: tokenizer=whitespace",
+            "- why: secret: AWS_S3_SECRET",
+            "- why: the secret: STRIPE_KEY, read at startup",
+            '- evidence: `api_key = os.getenv("STRIPE_KEY")`',
+        ]
+        for line in lines:
+            with self.subTest(line=line):
+                self.assertEqual(lc.find_secrets(line + "\n"), [])
+        for line in ("password = hunter2hunter2", 'password="hunter2hunter2"', "token: x9Lk2mQ7pR4t"):
+            with self.subTest(line=line):
+                self.assertEqual(lc.find_secrets(line + "\n"), [1])
+
+    def test_portuguese_values_with_english_keys_pass(self):
+        self.config(language="pt-BR")
+        write(self.root, "src/app.py", "")
+        write(self.root, "docs/learnings/testes.md", topic(
+            entry(title="Rode as migrações antes dos testes", why="o token: expirava quando o relógio mudava",
+                  evidence="`src/app.py` e a investigação no PR #12"), name="Testes"))
+        write(self.root, "docs/learnings/README.md", index(("testes", "Testes", 1)))
+        rep = self.check()
+        self.assertTrue(rep.ok, rep.errors)
+        self.assertEqual(rep.warnings, [])
+
+    def test_index_line_in_another_language_warns_with_expected_form(self):
+        write(self.root, "docs/learnings/testes.md", topic(entry(evidence="PR #12")))
+        write(self.root, "docs/learnings/README.md",
+              "# Aprendizados\n\n- [Testes](testes.md) — 1 entrada — como rodar a suíte\n")
+        rep = self.check()
+        hints = [w for w in rep.warnings if "README.md:3" in w]
+        self.assertEqual(len(hints), 1, rep.warnings)
+        self.assertIn("— N entries —", hints[0])
+        self.assertIn("English", hints[0])
+
+    def test_topic_missing_from_index_names_expected_line(self):
+        write(self.root, "docs/learnings/testing.md", topic(entry(evidence="PR #12")))
+        write(self.root, "docs/learnings/README.md", "# Learnings\n")
+        rep = self.check()
+        self.assertTrue(any("- [Testing](testing.md) — 1 entry — " in e for e in rep.errors), rep.errors)
+
+    def test_evidence_snippets_that_are_not_paths_are_not_probed(self):
+        evidence = ("`ratelib.Scheduler`, `os.environ`, `user.id`, `src/*.py`, `f(x.y)`, `a = b.c`, "
+                    '`"x.y"`, `which file?`, `arr[0].x`, `some text/with space`')
+        write(self.root, "docs/learnings/testing.md", topic(entry(evidence=evidence)))
+        write(self.root, "docs/learnings/README.md", index(("testing", "Testing", 1)))
+        rep = self.check()
+        self.assertEqual(rep.warnings, [])
+
+    def test_evidence_file_names_are_probed(self):
+        write(self.root, "docs/learnings/testing.md",
+              topic(entry(evidence="`app.py`, `src/gone.py:12`, `.env`, `package.lock.json`")))
+        write(self.root, "docs/learnings/README.md", index(("testing", "Testing", 1)))
+        warned = "\n".join(self.check().warnings)
+        for name in ("`app.py`", "`src/gone.py`", "`.env`", "`package.lock.json`"):
+            self.assertIn(name, warned)
+
     def test_dir_escaping_repo_is_error(self):
         for value in ("../outside", "/tmp/x"):
             self.config(dir=value)
@@ -188,6 +247,19 @@ class CheckTests(Base):
             json.dumps({"maxPerTopic": "10"}): "maxPerTopic",
             json.dumps({"upstream": {"kind": "email"}}): "upstream",
             json.dumps({"language": 3}): "language",
+            json.dumps({"upstream": {"kind": "github-issue", "label": "x"}}): "repo",
+            json.dumps({"upstream": {"kind": "github-issue", "repo": "owner", "label": "x"}}): "repo",
+            json.dumps({"upstream": {"kind": "github-issue", "repo": "a/b/c", "label": "x"}}): "repo",
+            json.dumps({"upstream": {"kind": "github-issue", "repo": "o/r; rm -rf", "label": "x"}}): "repo",
+            json.dumps({"upstream": {"kind": "github-issue", "repo": 5, "label": "x"}}): "repo",
+            json.dumps({"upstream": {"kind": "github-issue", "repo": "o/r"}}): "label",
+            json.dumps({"upstream": {"kind": "github-issue", "repo": "o/r", "label": ""}}): "label",
+            json.dumps({"upstream": {"kind": "github-issue", "repo": "o/r", "label": "a\nb"}}): "label",
+            json.dumps({"upstream": {"kind": "github-issue", "repo": "o/r", "label": "a`b"}}): "label",
+            json.dumps({"upstream": {"kind": "github-issue", "repo": "o/r", "label": 3}}): "label",
+            json.dumps({"upstream": {"kind": "file"}}): "path",
+            json.dumps({"upstream": {"kind": "file", "path": ""}}): "path",
+            json.dumps({"upstream": {"kind": "file", "path": ["x.md"]}}): "path",
         }
         for body, word in cases.items():
             with self.subTest(body=body):
@@ -200,6 +272,9 @@ class CheckTests(Base):
         cfg, errors = lc.load_config(lc.Path(self.root))
         self.assertEqual((cfg["dir"], cfg["maxPerTopic"], errors), ("docs/learnings", 10, []))
         self.assertNotIn("upstream", cfg)
+        self.config(upstream={"kind": "github-issue", "repo": "my-org/shared.learnings", "label": "learning candidate"})
+        cfg, errors = lc.load_config(lc.Path(self.root))
+        self.assertEqual((errors, cfg["upstream"]["repo"]), ([], "my-org/shared.learnings"))
         self.config(language="pt-BR", upstream={"kind": "file", "path": "x.md"}, mystery=1)
         cfg, errors = lc.load_config(lc.Path(self.root))
         self.assertEqual(errors, [])
@@ -267,7 +342,9 @@ class AssetTests(Base):
         with open(os.path.join(os.path.dirname(HERE), "SKILL.md"), encoding="utf-8") as fh:
             skill = fh.read()
         for line in ("learning: written <path>", "learning: test proposed <path>", "learning: skipped <reason>",
-                     "learning: promoted <link>", "learning: promote skipped <reason>"):
+                     "learning: promoted <link>", "learning: promote skipped <reason>",
+                     "learning: promote skipped secret check failed",
+                     "learning: refreshed <kept> kept, <changed> changed, <removed> removed"):
             self.assertIn(line, skill)
 
 

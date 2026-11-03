@@ -9,7 +9,8 @@ existence check of the repo-relative paths cited as evidence. It never follows a
     learnings_check.py candidates [--repo PATH]   JSON list of `scope: candidate` entries not yet promoted
 
 Config (`.project-learnings.json`, all optional): dir (default "docs/learnings"), maxPerTopic (default 10),
-language (string), upstream {"kind": "github-issue" | "file", ...}.
+language (string), upstream {"kind": "github-issue", "repo": "owner/name", "label": "..."} or
+{"kind": "file", "path": "..."}.
 
 Layout: `<dir>/README.md` is the index, one line per topic:
     - [Topic name](slug.md) — N entries — what it covers
@@ -44,10 +45,21 @@ SECRET_PATTERNS = [
     re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
 ]
 GENERIC_SECRET = re.compile(r"(?i)(?:password|passwd|secret|token|api[_-]?key)\w*\s*[:=]\s*(\S{8,})")
-UPPER_NAME = re.compile(r"^[A-Z_]+$")
+UPPER_NAME = re.compile(r"^[A-Z0-9_]+$")
+PLAIN_WORD = re.compile(r"^[^\W\d_]+(?:[-'][^\W\d_]+)*$")
+TRAILING_PUNCT = ".,;:!?)]}'\"`"
 INDEX_LINE = re.compile(r"^\s*[-*]\s+\[[^\]]*\]\(([^)/\s]+)\.md\)\s*[—–-]+\s*(\d+)\s+entr(?:y|ies)\b")
+TOPIC_LINK = re.compile(r"^\s*[-*]\s+\[[^\]]*\]\([^)/\s]+\.md\)")
+INDEX_FORM = "- [Topic name](slug.md) — N entries — what it covers"
 BACKTICKS = re.compile(r"`([^`]+)`")
 LINE_SUFFIX = re.compile(r"(?::\d+(?:-\d+)?|#L\d+(?:-L?\d+)?)$")
+GITHUB_REPO = re.compile(r"^[\w.-]+/[\w.-]+$")
+NOT_A_PATH = re.compile(r"[\s(=\"*?\[]")
+FILE_EXTENSIONS = frozenset("""
+    bash bat c cc cfg cjs conf cpp cs css csv dart env ex exs go gradle h hpp htm html ini ipynb java jl js json
+    jsx kt kts lock lua md mdx mjs mk php pl proto ps1 py pyi r rb rs rst sass scss sh sql svelte swift tf toml ts
+    tsx txt vue xml yaml yml zsh
+""".split())
 
 
 @dataclass
@@ -103,12 +115,28 @@ def _load_config(repo):
         else:
             errors.append(f"{CONFIG_NAME}: 'language' must be a string")
     if "upstream" in data:
-        up = data["upstream"]
-        if isinstance(up, dict) and up.get("kind") in UPSTREAM_KINDS:
-            cfg["upstream"] = up
+        up_errors = _upstream_errors(data["upstream"])
+        if up_errors:
+            errors.extend(f"{CONFIG_NAME}: {e}" for e in up_errors)
         else:
-            errors.append(f"{CONFIG_NAME}: 'upstream.kind' must be one of {', '.join(UPSTREAM_KINDS)}")
+            cfg["upstream"] = data["upstream"]
     return cfg, errors, warnings
+
+
+def _upstream_errors(up):
+    """Problems with the `upstream` object; its values reach a shell command in promote, so they are strict."""
+    if not isinstance(up, dict) or up.get("kind") not in UPSTREAM_KINDS:
+        return [f"'upstream.kind' must be one of {', '.join(UPSTREAM_KINDS)}"]
+    errors = []
+    if up["kind"] == "github-issue":
+        repo, label = up.get("repo"), up.get("label")
+        if not (isinstance(repo, str) and GITHUB_REPO.match(repo)):
+            errors.append("'upstream.repo' must be 'owner/name' (letters, digits, '_', '.', '-')")
+        if not (isinstance(label, str) and label.strip() and not any(c in label for c in "\n\r`")):
+            errors.append("'upstream.label' must be a non-empty string without newlines or backticks")
+    elif not (isinstance(up.get("path"), str) and up["path"].strip()):
+        errors.append("'upstream.path' must be a non-empty string")
+    return errors
 
 
 def load_config(repo):
@@ -167,6 +195,27 @@ def parse_index(text):
     return out
 
 
+def malformed_index_lines(text):
+    """Numbers of the index lines that link a topic file but do not match the expected form."""
+    return [n for n, line in enumerate(text.lstrip("﻿").splitlines(), 1)
+            if TOPIC_LINK.match(line) and not INDEX_LINE.match(line)]
+
+
+def _looks_like_secret(value):
+    """The generic rule (provider patterns are separate). A value is flagged when, once surrounding quotes and
+    trailing punctuation are dropped, it is not a backticked or UPPER_CASE variable name, not an expression
+    (contains `(`), and either mixes letters with digits or is 12+ characters that are neither a plain word
+    nor a dotted or quoted reference."""
+    if value.startswith("`"):
+        return False
+    value = value.strip("'\"").rstrip(TRAILING_PUNCT)
+    if not value or UPPER_NAME.match(value) or "(" in value:
+        return False
+    if any(c.isalpha() for c in value) and any(c.isdigit() for c in value):
+        return True
+    return len(value) >= 12 and not any(c in value for c in '."') and not PLAIN_WORD.match(value)
+
+
 def find_secrets(text):
     """Numbers of the lines that look like they hold a secret value (a variable's name alone is fine)."""
     hits = []
@@ -174,19 +223,32 @@ def find_secrets(text):
         if any(p.search(line) for p in SECRET_PATTERNS):
             hits.append(n)
             continue
-        for m in GENERIC_SECRET.finditer(line):
-            value = m.group(1)
-            if not value.startswith("`") and not UPPER_NAME.match(value):
-                hits.append(n)
-                break
+        if any(_looks_like_secret(m.group(1)) for m in GENERIC_SECRET.finditer(line)):
+            hits.append(n)
     return hits
+
+
+def _is_path_like(snippet):
+    """A backticked snippet is probed as a path only if it has no spaces or code characters and either has a
+    `/` or is a single file name with a known extension (`app.py`) or a dotfile (`.env`). Dotted identifiers
+    such as `os.environ` or `user.id` are not paths."""
+    if not snippet or snippet.startswith("http") or NOT_A_PATH.search(snippet):
+        return False
+    if "/" in snippet:
+        return True
+    if "." not in snippet:
+        return False
+    stem, ext = snippet.rsplit(".", 1)
+    if not stem:
+        return bool(ext)  # a dotfile: `.env`, `.gitignore`
+    return ext.lower() in FILE_EXTENSIONS
 
 
 def _evidence_paths(value):
     for snippet in BACKTICKS.findall(value):
-        snippet = snippet.strip()
-        if ("/" in snippet or "." in snippet) and not snippet.startswith("http"):
-            yield LINE_SUFFIX.sub("", snippet)
+        snippet = LINE_SUFFIX.sub("", snippet.strip())
+        if _is_path_like(snippet):
+            yield snippet
 
 
 def _is_probeable(path):
@@ -197,6 +259,21 @@ def _is_probeable(path):
 
 def _read(path):
     return path.read_text(encoding="utf-8-sig")
+
+
+def _topic_name(text):
+    """The `# ` title of a topic file, if it has one before the first entry (never one that looks like a secret,
+    since it is echoed in a message)."""
+    for line in text.lstrip("﻿").splitlines():
+        if line.startswith("# "):
+            return None if find_secrets(line) else line[2:].strip()
+        if line.startswith("## "):
+            return None
+    return None
+
+
+def _entries(n):
+    return f"{n} entry" if n == 1 else f"{n} entries"
 
 
 def _topic_files(directory):
@@ -238,12 +315,15 @@ def check(repo, today=None):
         try:
             text = _read(index_path)
             declared = parse_index(text)
+            for n in malformed_index_lines(text):
+                rep.warnings.append(f"{rel_dir}/README.md:{n}: looks like a topic line but is not read as one; "
+                                    f"expected \"{INDEX_FORM}\" (the word entry/entries stays in English)")
             for n in find_secrets(text):
                 rep.errors.append(f"{rel_dir}/README.md:{n}: possible secret value; remove it")
         except (OSError, UnicodeDecodeError) as exc:
             rep.errors.append(f"{rel_dir}/README.md: cannot read ({exc})")
 
-    counts = {}
+    counts, names = {}, {}
     for slug, path in topics:
         rel = f"{rel_dir}/{path.name}"
         try:
@@ -253,6 +333,7 @@ def check(repo, today=None):
             continue
         for n in find_secrets(text):
             rep.errors.append(f"{rel}:{n}: possible secret value; remove it")
+        names[slug] = _topic_name(text) or slug
         entries = parse_topic(text)
         counts[slug] = len(entries)
         if len(entries) > cfg["maxPerTopic"]:
@@ -263,7 +344,9 @@ def check(repo, today=None):
 
     for slug, _ in topics:
         if slug not in declared:
-            rep.errors.append(f"{rel_dir}/{slug}.md: topic is missing from the index {rel_dir}/README.md")
+            line = f"- [{names.get(slug, slug)}]({slug}.md) — {_entries(counts.get(slug, 0))} — <what it covers>"
+            rep.errors.append(f"{rel_dir}/{slug}.md: topic is missing from the index {rel_dir}/README.md; "
+                              f"add a line like \"{line}\"")
         elif slug in counts and declared[slug] != counts[slug]:
             rep.errors.append(f"{rel_dir}/README.md: '{slug}' declares {declared[slug]} entries "
                               f"but {slug}.md has {counts[slug]}")

@@ -41,3 +41,4 @@ Refresh deletes text other people wrote, so:
 1. Rewrite the index: one line per remaining topic file, with the real entry count and a description that still fits. Delete a topic file that ended up empty and drop its line.
 2. Run `python3 -I <skill>/scripts/learnings_check.py check` and fix any error before reporting.
 3. Report the counts: kept, rewritten, merged, deleted, replaced by a test.
+4. Without a user, end the output with exactly one line the caller can parse: `learning: refreshed <kept> kept, <changed> changed, <removed> removed`. `changed` counts rewritten entries plus the entry each merge keeps; `removed` counts deleted entries, entries folded into a merge and entries replaced by a test. For example, `learning: refreshed 4 kept, 1 changed, 2 removed`.

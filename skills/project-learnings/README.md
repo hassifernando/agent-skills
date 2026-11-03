@@ -50,7 +50,7 @@ Install the project-learnings skill from https://github.com/hassifernando/agent-
 
 STEP 1: Install
 - Clone the repository into a temporary directory outside this project, then read AGENTS.md from that clone and follow it.
-- Copy skills/project-learnings, the whole folder, into the skills directory of the harness I am using: .claude/skills/ for Claude Code, .kiro/skills/ for Kiro. If you are not sure which harness this is, ask me.
+- Copy skills/project-learnings, the whole folder, into the skills directory of the harness I am using: .claude/skills/ for Claude Code, .kiro/skills/ for Kiro, .agents/skills/ for Codex (Codex reads .agents/skills/<skill>/; not tested with this skill yet). If you are not sure which harness this is, ask me.
 - Run the verification steps from AGENTS.md and show me the real output.
 
 STEP 2: Set up (I authorize these writes, and only these)

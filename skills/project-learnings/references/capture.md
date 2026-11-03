@@ -35,7 +35,7 @@ On rungs 1 and 2 no text entry is written: the artifact in the code is the memor
 ## 3. Before writing an entry
 
 - **Look for a duplicate.** Read the index and the likely topic. If an entry already covers the same rule, update it (sharpen the wording, add evidence, bump `verified`) instead of adding a second one.
-- **A wrong lesson is a lesson.** If an existing entry turned out to be false or outdated, fixing or deleting it is the capture. Do it with evidence, never to justify the change you are making right now.
+- **A wrong lesson is a lesson.** If an existing entry turned out to be false or outdated, fixing or deleting it is the capture. Do it with evidence, never to justify the change you are making right now. If it was the topic's last entry, delete the topic file and its index line too. Report it as `learning: written <topic path>` either way, even when that file is gone.
 - **Pick the topic.** Use an existing topic when it fits. Create a new topic file only when none does, and add its line to the index.
 - **Respect the cap.** If the topic already holds `maxPerTopic` entries, run refresh on that topic first (see `refresh.md`) and merge or remove one before adding. Never raise the cap to make room.
 - **Choose the scope.** `candidate` only when the rule names nothing of this project's domain, paths or infrastructure and would help in any repository. Otherwise `project`. When unsure, `project`.

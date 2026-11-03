@@ -26,7 +26,7 @@ The exact format is in `references/entry-format.md`. Read it before writing or e
 
 - **Capture** (the default): the user corrected you, a problem cost real investigation, or an existing entry proved wrong. One lesson per run. See `references/capture.md`.
 - **Refresh**: the user asks to prune or re-check the learnings, a topic is at its cap, the check warns about stale entries, or the project's update guide calls for it. See `references/refresh.md`.
-- **Promote**: the user asks to send generic lessons upstream. See `references/promote.md`.
+- **Promote**: the user asks to send generic lessons upstream. It runs the check first and sends nothing while a possible secret is reported. See `references/promote.md`.
 - **Set up**: the project has no learnings yet and the user wants them. With their go-ahead, copy `assets/index-template.md` to `<dir>/README.md`, optionally `assets/config.example.json` to `.project-learnings.json` (adjusted, or dropped if the defaults fit), and add `assets/agent-instructions-snippet.md` to the project's standing agent instructions (`AGENTS.md`, `CLAUDE.md` or the harness's equivalent) with `<dir>` filled in. Do not create topics in advance.
 
 If it is unclear which mode the user means, it is capture.
@@ -46,15 +46,21 @@ Never edit a lesson to justify the work you are doing now.
 
 Write entries in the `language` from the config. If there is none, use the language of the existing entries. If there are none, use the language of the project's agent instructions. The skill's own files stay in English.
 
+The structure the check reads is always English, whatever the language: the field keys (`why`, `evidence`, `scope`, `added`, `verified`, `promoted`), the scope values (`project`, `candidate`) and the word `entry`/`entries` in the index lines. Everything else follows `language`: the rule headings, the field values, topic names and index descriptions.
+
 ## Without a user (called by another agent)
 
 When another agent invokes this skill (an orchestrator at the end of a task, for example), ask no questions. Decide, act, and end the output with exactly one of these lines so the caller can parse it:
 
-- `learning: written <path>`: an entry was written or updated in `<path>`.
+- `learning: written <path>`: an entry was written, updated, corrected or deleted in `<path>`.
 - `learning: test proposed <path>`: the lesson belongs in a test, lint rule or comment in `<path>`; no entry was written.
 - `learning: skipped <reason>`: nothing was written; `<reason>` is the one-line answer to the worthiness test.
 
-Refresh without a user applies its changes and lists all of them. Promote without a user never sends: it ends with `learning: promote skipped <reason>`. With approval, a promote run ends with one `learning: promoted <link>` line per lesson sent, or `learning: promote skipped <reason>` when nothing was sent.
+A capture that corrects or deletes a wrong entry also ends with `learning: written <path>`, where `<path>` is the topic file. That holds even when the file no longer exists: deleting a topic's last entry deletes the topic file and its index line.
+
+Refresh without a user applies its changes, lists all of them and ends with `learning: refreshed <kept> kept, <changed> changed, <removed> removed` (changed: rewritten entries and the entry each merge keeps; removed: deleted entries, entries folded into a merge, entries replaced by a test).
+
+Every promote run starts with the check and stops with `learning: promote skipped secret check failed` if it reports a possible secret. Promote without a user never sends: it ends with `learning: promote skipped <reason>`. With approval, a promote run ends with one `learning: promoted <link>` line per lesson sent, or `learning: promote skipped <reason>` when nothing was sent.
 
 ## Always finish with the check
 

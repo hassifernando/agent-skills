@@ -4,9 +4,17 @@ Some lessons are not about this project at all. Promote packages the `candidate`
 
 Nothing is written outside this project without explicit approval.
 
-## 1. Collect
+## 1. Check, then collect
 
-Run:
+Run the check first:
+
+```sh
+python3 -I <skill>/scripts/learnings_check.py check
+```
+
+If any `error:` line reports a possible secret value, stop before packaging anything: nothing may leave the project while a secret might be in the text. Tell the user which file and line to clean (the check never prints the value) and end with `learning: promote skipped secret check failed`. Other errors do not block promote, but mention them.
+
+Then list the candidates:
 
 ```sh
 python3 -I <skill>/scripts/learnings_check.py candidates
@@ -36,14 +44,16 @@ Show all packages to the user, together with where they would go (`upstream.kind
 
 **Never put learning text inside a shell string.** Rules and evidence come from the repository and often contain backticks, `$(...)` or quotes, which a shell runs or breaks on inside double quotes. Write any entry text (title, body, appended package) to a file with your file-writing tool, or with a heredoc whose delimiter is quoted (`<<'EOF'`), and pass it by file or by a variable read from that file.
 
-**`kind: github-issue`** (needs `gh`, authenticated): one issue per package. Write the title (one line) and the body to two temporary files first, then:
+**`kind: github-issue`** (needs `gh`, authenticated): one issue per package. Write the title (one line) and the body to two temporary files first. Read `repo` and `label` from the config into variables too, never typing them into the command; the check already rejects a `repo` that is not `owner/name` and a `label` with a newline or backtick. Then:
 
 ```sh
+repo=$(python3 -I -c 'import json; print(json.load(open(".project-learnings.json"))["upstream"]["repo"])')
+label=$(python3 -I -c 'import json; print(json.load(open(".project-learnings.json"))["upstream"]["label"])')
 title=$(cat <title file>)
-gh issue create --repo <upstream.repo> --label <upstream.label> --title "$title" --body-file <body file>
+gh issue create --repo "$repo" --label "$label" --title "$title" --body-file <body file>
 ```
 
-`"$title"` expands the variable once and does not run what is inside it. If the label does not exist on the destination, report that instead of creating labels there. Use the issue URL `gh` prints as the link.
+Each quoted variable expands once, as a single argument, and nothing inside it runs. If the label does not exist on the destination, report that instead of creating labels there. Use the issue URL `gh` prints as the link.
 
 **`kind: file`**: append each package to the file at `upstream.path` (or, if `path` is a folder, write one new file per package in it). Use your file-editing tool (or a quoted heredoc), never `echo "<package>" >>`. Never rewrite or reorder what is already there. Use the file path (and heading, if any) as the link.
 
