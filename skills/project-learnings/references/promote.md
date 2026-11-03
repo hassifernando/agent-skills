@@ -34,15 +34,18 @@ Show all packages to the user, together with where they would go (`upstream.kind
 
 ## 4. Send the approved packages
 
-**`kind: github-issue`** (needs `gh`, authenticated): one issue per package.
+**Never put learning text inside a shell string.** Rules and evidence come from the repository and often contain backticks, `$(...)` or quotes, which a shell runs or breaks on inside double quotes. Write any entry text (title, body, appended package) to a file with your file-writing tool, or with a heredoc whose delimiter is quoted (`<<'EOF'`), and pass it by file or by a variable read from that file.
+
+**`kind: github-issue`** (needs `gh`, authenticated): one issue per package. Write the title (one line) and the body to two temporary files first, then:
 
 ```sh
-gh issue create --repo <upstream.repo> --label <upstream.label> --title "<rule>" --body-file <package file>
+title=$(cat <title file>)
+gh issue create --repo <upstream.repo> --label <upstream.label> --title "$title" --body-file <body file>
 ```
 
-Write the body to a temporary file rather than inlining it in the shell command. If the label does not exist on the destination, report that instead of creating labels there. Use the issue URL `gh` prints as the link.
+`"$title"` expands the variable once and does not run what is inside it. If the label does not exist on the destination, report that instead of creating labels there. Use the issue URL `gh` prints as the link.
 
-**`kind: file`**: append each package to the file at `upstream.path` (or, if `path` is a folder, write one new file per package in it). Never rewrite or reorder what is already there. Use the file path (and heading, if any) as the link.
+**`kind: file`**: append each package to the file at `upstream.path` (or, if `path` is a folder, write one new file per package in it). Use your file-editing tool (or a quoted heredoc), never `echo "<package>" >>`. Never rewrite or reorder what is already there. Use the file path (and heading, if any) as the link.
 
 ## 5. Record
 
