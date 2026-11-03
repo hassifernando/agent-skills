@@ -1,0 +1,3 @@
+## Project learnings (project-learnings)
+
+This project keeps short, curated lessons in `<dir>/` (replace `<dir>` with the `dir` of `.project-learnings.json`; the default is `docs/learnings`). Before you work in an area, read `<dir>/README.md` and open only the topic files that touch that area. When the user corrects you, or when a problem cost real investigation to understand, run the `project-learnings` skill in capture mode: it decides whether the lesson is worth keeping and in what form, and most of the time the answer is nothing. Never edit or delete a lesson to make the work you are doing now look right; if a lesson is wrong, say so and fix it through capture, with evidence.

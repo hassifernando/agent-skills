@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: skips-routine-fix
+expected_outcome: |
+  The change is a typo fix whose diff already explains itself, and nothing about it will recur. The agent fails the worthiness test, writes nothing under docs/learnings/, and ends with a `learning: skipped <reason>` line whose reason says the diff already explains the fix.
+context:
+  scaffold_script: place-files.sh

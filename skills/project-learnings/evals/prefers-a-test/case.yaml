@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: prefers-a-test
+expected_outcome: |
+  The lesson fits in one assertion: prices are integer cents and must never be summed as floats. The cheapest durable form is a test, so the agent proposes or writes a test (for example in `tests/`) and writes no text entry. It ends with `learning: test proposed <path>`.
+context:
+  scaffold_script: place-files.sh
