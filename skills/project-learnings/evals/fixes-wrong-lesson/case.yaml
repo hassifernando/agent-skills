@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: fixes-wrong-lesson
+expected_outcome: |
+  The existing entry says user ids must be passed as strings, but the current `app/users.py` takes an int and rejects strings. The entry is wrong. The agent corrects it in place (or deletes it), refreshes `verified`, does not add a second entry that duplicates the topic, and keeps the index count right. It ends with `learning: written <path>`.
+context:
+  scaffold_script: place-files.sh

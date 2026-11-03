@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: writes-non-obvious-lesson
+expected_outcome: |
+  The bug cost real investigation and the cause (the `ratelib` scheduler reads the timezone from the TZ environment variable, not from its `tz=` argument) is not visible in the code. The agent writes one entry in a suitably named topic file, with a rule, a why that names the symptom, evidence citing `app/scheduler.py`, scope `project`, dates, and a matching index line. It ends with `learning: written <path>`.
+context:
+  scaffold_script: place-files.sh

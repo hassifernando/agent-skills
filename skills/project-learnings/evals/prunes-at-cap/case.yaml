@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: prunes-at-cap
+expected_outcome: |
+  The topic build-and-tests is at its cap (3 of 3) and one entry is obsolete (the legacy importer it cites was removed from the repo). The new lesson would make a fourth. The agent refreshes the topic: removes or merges the obsolete entry, adds the new one, keeps the topic at 3 entries or fewer, never raises `maxPerTopic`, and updates the index count. It ends with `learning: written <path>`.
+context:
+  scaffold_script: place-files.sh

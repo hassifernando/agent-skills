@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: marks-candidate-no-send
+expected_outcome: |
+  The lesson is generic (it names nothing of this project), so the entry is written with `scope: candidate`. An upstream is configured but nobody approved sending anything, so no `gh issue create` (or any other write outside the repo) happens.
+context:
+  scaffold_script: place-files.sh
