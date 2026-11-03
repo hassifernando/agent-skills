@@ -21,6 +21,7 @@ This table is generated from each skill's `SKILL.md` by `scripts/build_catalog.p
 |---|---|---|---|
 | [`bbom-audit`](skills/bbom-audit) | architecture | 0.1.1 | Read-only software architecture audit that decides whether a codebase is a Big Ball of Mud (BBoM) and how healthy its structure is. |
 | [`bbom-prevent`](skills/bbom-prevent) | architecture | 0.2.1 | Keeps a codebase from degrading into a Big Ball of Mud, continuously, across sessions. |
+| [`project-learnings`](skills/project-learnings) | learning | 0.1.0 | Keeps a small, curated set of project lessons in the repository so the next agent does not repeat a mistake or redo a long investigation. |
 <!-- skills:end -->
 
 ## Quick start
