@@ -238,6 +238,39 @@ class CandidateTests(Base):
         self.assertEqual(got[0]["fields"]["scope"], "candidate")
 
 
+ASSETS = os.path.join(os.path.dirname(HERE), "assets")
+
+
+def read_asset(name):
+    with open(os.path.join(ASSETS, name), encoding="utf-8") as fh:
+        return fh.read()
+
+
+class AssetTests(Base):
+    def test_assets_seed_a_valid_repo(self):
+        config_text = read_asset("config.example.json")
+        write(self.root, ".project-learnings.json", config_text)
+        learnings_dir = json.loads(config_text)["dir"]
+        write(self.root, f"{learnings_dir}/README.md", read_asset("index-template.md"))
+        rep = self.check()
+        self.assertTrue(rep.ok, rep.errors)
+        self.assertEqual(rep.warnings, [])
+        self.assertNotIn("no learnings yet", rep.notes)  # the seeded directory was really read
+
+    def test_config_example_has_upstream_kinds(self):
+        cfg = json.loads(read_asset("config.example.json"))
+        self.assertIn(cfg["upstream"]["kind"], lc.UPSTREAM_KINDS)
+        self.assertEqual(cfg["upstream"]["kind"], "github-issue")
+        self.assertEqual(set(cfg), {"dir", "language", "maxPerTopic", "upstream"})
+
+    def test_skill_md_names_the_final_lines(self):
+        with open(os.path.join(os.path.dirname(HERE), "SKILL.md"), encoding="utf-8") as fh:
+            skill = fh.read()
+        for line in ("learning: written <path>", "learning: test proposed <path>", "learning: skipped <reason>",
+                     "learning: promoted <link>", "learning: promote skipped <reason>"):
+            self.assertIn(line, skill)
+
+
 class CliTests(Base):
     def run_cli(self, *args):
         return subprocess.run([sys.executable, "-I", SCRIPT, *args], capture_output=True, text=True)

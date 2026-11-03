@@ -1,0 +1,10 @@
+{
+  "dir": "docs/learnings",
+  "language": "en",
+  "maxPerTopic": 10,
+  "upstream": {
+    "kind": "github-issue",
+    "repo": "owner/name",
+    "label": "learning-candidate"
+  }
+}
